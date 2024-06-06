@@ -2,10 +2,14 @@
 
 _Sizing Tool for Planetary Gear Set - with Julia Lang in Jupyter Notebook_
 
-## Feature
-* Composition for Simple Planetary Gear Set
-* Composition for Compound Planetary Gear Set
+## Codes
 
-![](./img/PGS.png)  ![](./PGS.png)
+* `PGS.ipynb` : Tool for Simple / Compound Planetary
+* `WOLFROM.ipynb` : Tool for Wolfrom Planetary
+
+## Feature
+![](./img/PGS.png)
+
+![](./img/WOLFROM.png)
 
 ## Thank you!
