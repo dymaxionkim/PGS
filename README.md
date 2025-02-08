@@ -14,7 +14,7 @@ pip install numpy matplotlib customtkinter
 
 ## How to use
 
-~[](./img/PGS_01.png)
+![](./img/PGS_01.png)
 
 * _Type_ : Choose Gearbox Type
 * _Module_ : Gear Module
