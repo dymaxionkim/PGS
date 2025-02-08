@@ -77,69 +77,85 @@ class PGS:
     def Checks(self):
         # Checks
         print("\n\n### Checks")
-        ### ê°ê°ì˜ ìœ ì„±ê¸°ì–´ì™€ ì¬ê¸°ì–´ì˜ ë§ë¬¼ë¦¼ ìˆœê°„ì˜ ì¹˜ì ‘ì´‰ í˜•íƒœê°€ ê°ê° ë‹¤ë¥¸ì§€ í™•ì¸
-        ### ì§„ë™ì´ ë” ì ê²Œ ë°œìƒí•˜ë„ë¡ í•˜ëŠ” ì¡°ê±´ (ì„ íƒì‚¬í•­)
+        ### °¢°¢ÀÇ À¯¼º±â¾î¿Í ½ã±â¾îÀÇ ¸Â¹°¸² ¼ø°£ÀÇ Ä¡Á¢ÃË ÇüÅÂ°¡ °¢°¢ ´Ù¸¥Áö È®ÀÎ
+        ### Áøµ¿ÀÌ ´õ Àû°Ô ¹ß»ıÇÏµµ·Ï ÇÏ´Â Á¶°Ç (¼±ÅÃ»çÇ×)
         ## Sequential Mesh Condition (Non-Factorizing) 1
         print("# Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : ")
         if (self.Zs1%self.Np)!=0 and (-self.Zr1%self.Np)!=0:
             print("Good for noise")
+            self.NonFactorizing1 = "Good for noise"
         else:
             print("No good for noise")
+            self.NonFactorizing1 = "No good for noise"
         ## Sequential Mesh Condition (Non-Factorizing) 2
         if self.TYPE!=0:
             print("# Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : ")
             if (self.Zs2%self.Np)!=0 and (-self.Zr2%self.Np)!=0:
                 print("Good for noise")
+                self.NonFactorizing2 = "Good for noise"
             else:
                 print("No good for noise")
-        ### ë“±ê°„ê²© ë°°ì¹˜ì¡°ê±´
-        ### ìœ ì„±ê¸°ì–´ê°€ ì¼ì •í•œ ê°„ê²©ì„ ë‘ê³  ë°°ì¹˜ë˜ì–´ì•¼ í•¨
+                self.NonFactorizing2 = "No good for noise"
+        ### µî°£°İ ¹èÄ¡Á¶°Ç
+        ### À¯¼º±â¾î°¡ ÀÏÁ¤ÇÑ °£°İÀ» µÎ°í ¹èÄ¡µÇ¾î¾ß ÇÔ
         ## Check Planets Numbers (Equal Distance Condition) 1
         print("# Planet Numbers (Equal Distance Condition) 1 : ")
         if self.TYPE==2:
             if (self.Zs1-self.Zr1)%(self.Np*self.TYPE_DIFF)==0:
                 print("OK")
+                self.EqualDistance1 = "OK"
             else:
                 print("Fail")
+                self.EqualDistance1 = "Fail"
         else:
             if (self.Zs1-self.Zr1)%self.Np==0:
                 print("OK")
+                self.EqualDistance1 = "OK"
             else:
                 print("Fail")
+                self.EqualDistance1 = "Fail"
         ## Check Planets Numbers (Equal Distance Condition) 2
         print("# Planet Numbers (Equal Distance Condition) 2 : ")
         if self.TYPE!=0:
             if -self.Zr2%self.Np==0:
                 print("OK")
+                self.EqualDistance2 = "OK"
             else:
                 print("Fail")
-        ### ì¤‘ì²© ë°©ì§€ ì¡°ê±´
-        ### ìœ ì„±ê¸°ì–´ ì‚¬ì´ì— ì¤‘ì²©ì´ ì—†ì–´ì•¼ í•¨
+                self.EqualDistance2 = "Fail"
+        ### ÁßÃ¸ ¹æÁö Á¶°Ç
+        ### À¯¼º±â¾î »çÀÌ¿¡ ÁßÃ¸ÀÌ ¾ø¾î¾ß ÇÔ
         ## Check Planets Interference (Non-Overlap Condition) 1
         print("# Planets Interference (Non-Overlap Condition) 1 : ")
         if self.alpha==20 and self.Np<(np.pi/np.asin((self.Zp1+2)/(self.Zp1+self.Zs1))):
             print("OK")
+            self.PlanetsInterference1 = "OK"
         else:
             print("Fail")
+            self.PlanetsInterference1 = "Fail"
         ## Check Planets Interference (Non-Overlap Condition) 2
         if self.TYPE!=0:
             print("# Planets Interference (Non-Overlap Condition) 2 : ")
             if self.alpha==20 and self.Np<(np.pi/np.asin((self.Zp2+2)/(self.Zp2+self.Zs2))):
                 print("OK")
+                self.PlanetsInterference2 = "OK"
             else:
                 print("Fail")
+                self.PlanetsInterference2 = "Fail"
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
-        ### ì¸ë³¼ë¥˜íŠ¸ ê°„ì„­ì¡°ê±´
-        ### ìœ ì„±ê¸°ì–´ì˜ ì‡ìˆ˜ê°€ ì‘ì„ ë•Œ, ìœ ì„±ê¸°ì–´ì˜ ì´ë¿Œë¦¬ê°€ ë§ê¸°ì–´ì˜ ì´ëê³¼ ê°„ì„­ì„ ì¼ìœ¼í‚¬ ìˆ˜ ìˆìŒ
+        ### ÀÎº¼·ùÆ® °£¼·Á¶°Ç
+        ### À¯¼º±â¾îÀÇ ÀÕ¼ö°¡ ÀÛÀ» ¶§, À¯¼º±â¾îÀÇ ÀÌ»Ñ¸®°¡ ¸µ±â¾îÀÇ ÀÌ³¡°ú °£¼·À» ÀÏÀ¸Å³ ¼ö ÀÖÀ½
         ## Check Involute Interference Condition 1
         print("# Involute Interference Condition 1 : ")
         temp=(self.Zp1*np.sin(np.deg2rad(self.alpha)))**2
         temp2 = (temp-4)/(2*temp-4)
         if self.alpha==20 and -self.Zr1>=temp2:
             print("OK")
+            self.InvoluteInterference1 = "OK"
         else:
             print("Fail")
+            self.InvoluteInterference1 = "Fail"
         ## Check Involute Interference Condition 2
         if self.TYPE!=0:
             print("# Involute Interference Condition 2 : ")
@@ -147,28 +163,52 @@ class PGS:
             temp2 = (temp-4)/(2*temp-4)
             if self.alpha==20 and -self.Zr2>=temp2:
                 print("OK")
+                self.InvoluteInterference2 = "OK"
             else:
                 print("Fail")
+                self.InvoluteInterference2 = "Fail"
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
-        ### íŠ¸ë¦¬ë° ê°„ì„­ì¡°ê±´
-        ### ë§ê¸°ì–´ì— ìœ ì„±ê¸°ì–´ë¥¼ ì¡°ë¦½í•  ë•Œ, ì¤‘ì‹¬ì—ì„œ ì™¸ê³½ìœ¼ë¡œ ë¼ì›Œë„£ëŠ” ê²½ìš° ê°„ì„­ ë°œìƒ ì—¬ë¶€
-        ### íŠ¸ë¦¬ë° ê°„ì„­ì„ í”¼í•˜ê¸° ìœ„í•´ì„œëŠ” +ë°©í–¥ ì „ìœ„ë¥¼ ì£¼ë©´ ìœ ë¦¬í•¨
+        ### Æ®¸®¹Ö °£¼·Á¶°Ç
+        ### ¸µ±â¾î¿¡ À¯¼º±â¾î¸¦ Á¶¸³ÇÒ ¶§, Áß½É¿¡¼­ ¿Ü°ûÀ¸·Î ³¢¿ö³Ö´Â °æ¿ì °£¼· ¹ß»ı ¿©ºÎ
+        ### Æ®¸®¹Ö °£¼·À» ÇÇÇÏ±â À§ÇØ¼­´Â +¹æÇâ ÀüÀ§¸¦ ÁÖ¸é À¯¸®ÇÔ
         ## Check Trimming Interference 1
         print("# Trimming Interference 1 : ")
         if self.alpha==20 and (-self.Zr1-self.Zp1)>=16:
             print("OK")
+            self.TrimmingInterference1 = "OK"
         else:
             print("Fail")
+            self.TrimmingInterference1 = "Fail"
         ## Check Trimming Interference 2
         if self.TYPE!=0:
             print("# Trimming Interference 2 : ")
             if self.alpha==20 and (-self.Zr2-self.Zp2)>=16:
                 print("OK")
+                self.TrimmingInterference2 = "OK"
             else:
                 print("Fail")
+                self.TrimmingInterference2 = "Fail"
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
+            self.TrimmingInterference1 = "No Check (Non-Standard)"
+        ### °¢ ±â¾îÀÇ ÀÕ¼ö°¡ Á¤¼öÀÎÁö ¿©ºÎ ÆÇº°
+        ## Check Teeth Numbers which is Integer
+        print("# Teeth Numbers which is Integer 1 : ")
+        if round(self.Zs1,6).is_integer() and round(self.Zp1,6).is_integer() and round(self.Zr1,6).is_integer():
+            print("OK")
+            self.TeethNumberInteger1 = "OK"
+        else:
+            print("Fail")
+            self.TeethNumberInteger1 = "Fail"
+        if self.TYPE!=0:
+            print("# Teeth Numbers which is Integer 2 : ")
+            if round(self.Zs2,6).is_integer() and round(self.Zp2,6).is_integer() and round(self.Zr2,6).is_integer():
+                print("OK")
+                self.TeethNumberInteger2 = "OK"
+            else:
+                print("Fail")
+                self.TeethNumberInteger2 = "Fail"
 
 """
 P1 = PGS()
