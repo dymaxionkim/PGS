@@ -77,8 +77,8 @@ class PGS:
     def Checks(self):
         # Checks
         print("\n\n### Checks")
-        ### °¢°¢ÀÇ À¯¼º±â¾î¿Í ½ã±â¾îÀÇ ¸Â¹°¸² ¼ø°£ÀÇ Ä¡Á¢ÃË ÇüÅÂ°¡ °¢°¢ ´Ù¸¥Áö È®ÀÎ
-        ### Áøµ¿ÀÌ ´õ Àû°Ô ¹ß»ýÇÏµµ·Ï ÇÏ´Â Á¶°Ç (¼±ÅÃ»çÇ×)
+        ### ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Â¹ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ä¡ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ù¸ï¿½ï¿½ï¿½ È®ï¿½ï¿½
+        ### ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß»ï¿½ï¿½Ïµï¿½ï¿½ï¿½ ï¿½Ï´ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½)
         ## Sequential Mesh Condition (Non-Factorizing) 1
         print("# Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : ")
         if (self.Zs1%self.Np)!=0 and (-self.Zr1%self.Np)!=0:
@@ -96,8 +96,8 @@ class PGS:
             else:
                 print("No good for noise")
                 self.NonFactorizing2 = "No good for noise"
-        ### µî°£°Ý ¹èÄ¡Á¶°Ç
-        ### À¯¼º±â¾î°¡ ÀÏÁ¤ÇÑ °£°ÝÀ» µÎ°í ¹èÄ¡µÇ¾î¾ß ÇÔ
+        ### ï¿½î°£ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ï¿½ï¿½
+        ### ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î°¡ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Î°ï¿½ ï¿½ï¿½Ä¡ï¿½Ç¾ï¿½ï¿½ ï¿½ï¿½
         ## Check Planets Numbers (Equal Distance Condition) 1
         print("# Planet Numbers (Equal Distance Condition) 1 : ")
         if self.TYPE==2:
@@ -123,11 +123,11 @@ class PGS:
             else:
                 print("Fail")
                 self.EqualDistance2 = "Fail"
-        ### ÁßÃ¸ ¹æÁö Á¶°Ç
-        ### À¯¼º±â¾î »çÀÌ¿¡ ÁßÃ¸ÀÌ ¾ø¾î¾ß ÇÔ
+        ### ï¿½ï¿½Ã¸ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+        ### ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¿ï¿½ ï¿½ï¿½Ã¸ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
         ## Check Planets Interference (Non-Overlap Condition) 1
         print("# Planets Interference (Non-Overlap Condition) 1 : ")
-        if self.alpha==20 and self.Np<(np.pi/np.asin((self.Zp1+2)/(self.Zp1+self.Zs1))):
+        if self.alpha==20 and self.Np<(np.pi/np.arcsin((self.Zp1+2)/(self.Zp1+self.Zs1))):
             print("OK")
             self.PlanetsInterference1 = "OK"
         else:
@@ -136,7 +136,7 @@ class PGS:
         ## Check Planets Interference (Non-Overlap Condition) 2
         if self.TYPE!=0:
             print("# Planets Interference (Non-Overlap Condition) 2 : ")
-            if self.alpha==20 and self.Np<(np.pi/np.asin((self.Zp2+2)/(self.Zp2+self.Zs2))):
+            if self.alpha==20 and self.Np<(np.pi/np.arcsin((self.Zp2+2)/(self.Zp2+self.Zs2))):
                 print("OK")
                 self.PlanetsInterference2 = "OK"
             else:
@@ -144,8 +144,8 @@ class PGS:
                 self.PlanetsInterference2 = "Fail"
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
-        ### ÀÎº¼·ùÆ® °£¼·Á¶°Ç
-        ### À¯¼º±â¾îÀÇ ÀÕ¼ö°¡ ÀÛÀ» ¶§, À¯¼º±â¾îÀÇ ÀÌ»Ñ¸®°¡ ¸µ±â¾îÀÇ ÀÌ³¡°ú °£¼·À» ÀÏÀ¸Å³ ¼ö ÀÖÀ½
+        ### ï¿½Îºï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        ### ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Õ¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ì»Ñ¸ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ì³ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Å³ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         ## Check Involute Interference Condition 1
         print("# Involute Interference Condition 1 : ")
         temp=(self.Zp1*np.sin(np.deg2rad(self.alpha)))**2
@@ -169,9 +169,9 @@ class PGS:
                 self.InvoluteInterference2 = "Fail"
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
-        ### Æ®¸®¹Ö °£¼·Á¶°Ç
-        ### ¸µ±â¾î¿¡ À¯¼º±â¾î¸¦ Á¶¸³ÇÒ ¶§, Áß½É¿¡¼­ ¿Ü°ûÀ¸·Î ³¢¿ö³Ö´Â °æ¿ì °£¼· ¹ß»ý ¿©ºÎ
-        ### Æ®¸®¹Ö °£¼·À» ÇÇÇÏ±â À§ÇØ¼­´Â +¹æÇâ ÀüÀ§¸¦ ÁÖ¸é À¯¸®ÇÔ
+        ### Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        ### ï¿½ï¿½ï¿½ï¿½î¿¡ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î¸¦ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½, ï¿½ß½É¿ï¿½ï¿½ï¿½ ï¿½Ü°ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß»ï¿½ ï¿½ï¿½ï¿½ï¿½
+        ### Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½ï¿½ +ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         ## Check Trimming Interference 1
         print("# Trimming Interference 1 : ")
         if self.alpha==20 and (-self.Zr1-self.Zp1)>=16:
@@ -192,10 +192,10 @@ class PGS:
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
             self.TrimmingInterference1 = "No Check (Non-Standard)"
-        ### °¢ ±â¾îÀÇ ÀÕ¼ö°¡ Á¤¼öÀÎÁö ¿©ºÎ ÆÇº°
+        ### ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Õ¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Çºï¿½
         ## Check Teeth Numbers which is Integer
         print("# Teeth Numbers which is Integer 1 : ")
-        if round(self.Zs1,6).is_integer() and round(self.Zp1,6).is_integer() and round(self.Zr1,6).is_integer():
+        if round(float(self.Zs1),6).is_integer() and round(float(self.Zp1),6).is_integer() and round(float(self.Zr1),6).is_integer():
             print("OK")
             self.TeethNumberInteger1 = "OK"
         else:
@@ -203,7 +203,7 @@ class PGS:
             self.TeethNumberInteger1 = "Fail"
         if self.TYPE!=0:
             print("# Teeth Numbers which is Integer 2 : ")
-            if round(self.Zs2,6).is_integer() and round(self.Zp2,6).is_integer() and round(self.Zr2,6).is_integer():
+            if round(float(self.Zs2),6).is_integer() and round(float(self.Zp2),6).is_integer() and round(float(self.Zr2),6).is_integer():
                 print("OK")
                 self.TeethNumberInteger2 = "OK"
             else:
