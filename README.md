@@ -9,8 +9,9 @@ pip install numpy matplotlib customtkinter
 ```
 
 ## Exe script
-* `PGS.bat` for MS Windows : Check and modify python environment for you
-* `python design.py` for Linux and etc.
+* `PGS.bat` for MS Windows
+* `./PGS.sh` for Linux
+* Check and modify python environment for you.
 
 ## How to use
 

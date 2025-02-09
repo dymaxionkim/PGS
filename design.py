@@ -127,6 +127,7 @@ def Rotate(Xin,Yin,Angle):
 
 def PlotPGS():
     plt.figure("PGS",figsize=(6,6))
+    plt.clf() # Clear figure
     if int(entry_PlotOption.get())==1 or int(entry_PlotOption.get())==3:
         # Plot Gs1
         Sun_Angle = 0.0
