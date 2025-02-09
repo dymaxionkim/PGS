@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas
 from GPG import GPG
 from PGS import PGS
 
@@ -170,84 +171,120 @@ def PlotPGS():
     # Plot show
     plt.axis("equal")
     plt.grid(True)
+    plt.savefig('./Result/PGS.png',dpi=100)
     plt.show()
 
 def OutputText():
     ## Head
     textbox.delete("0.0", "end")
-    textbox.insert("0.0", "\n########################################\n#\n# PGS - Planetary Gear Sizing Program\n#\n########################################")
+    textbox.insert("0.0", "# PGS - Planetary Gear Sizing Program\n\n")
+    textbox.insert("end", "![](./PGS.png)\n\n")
     ### Check Geometrical Conditions 
-    textbox.insert("end","\n\n### Check Geometrical Conditions")
-    textbox.insert("end","\n# Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : "+P1.NonFactorizing1)
+    textbox.insert("end","## Check Geometrical Conditions\n\n")
+    textbox.insert("end","* Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : "+P1.NonFactorizing1+"\n")
     if P1.TYPE!=0:
-        textbox.insert("end","\n# Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : "+P1.NonFactorizing2)
-    textbox.insert("end","\n# Planet Numbers (Equal Distance Condition) 1 : "+P1.EqualDistance1)
+        textbox.insert("end","* Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : "+P1.NonFactorizing2+"\n")
+    textbox.insert("end","* Planet Numbers (Equal Distance Condition) 1 : "+P1.EqualDistance1+"\n")
     if P1.TYPE!=0:
-        textbox.insert("end","\n# Planet Numbers (Equal Distance Condition) 2 : "+P1.EqualDistance2)
-    textbox.insert("end","\n# Planets Interference (Non-Overlap Condition) 1 : "+P1.PlanetsInterference1)
+        textbox.insert("end","* Planet Numbers (Equal Distance Condition) 2 : "+P1.EqualDistance2+"\n")
+    textbox.insert("end","* Planets Interference (Non-Overlap Condition) 1 : "+P1.PlanetsInterference1+"\n")
     if P1.TYPE!=0:
-        textbox.insert("end","\n# Planets Interference (Non-Overlap Condition) 2 : "+P1.PlanetsInterference2)
-    textbox.insert("end","\n# Involute Interference Condition 1 : "+P1.InvoluteInterference1)
+        textbox.insert("end","* Planets Interference (Non-Overlap Condition) 2 : "+P1.PlanetsInterference2+"\n")
+    textbox.insert("end","* Involute Interference Condition 1 : "+P1.InvoluteInterference1+"\n")
     if P1.TYPE!=0:
-        textbox.insert("end","\n# Involute Interference Condition 2 : "+P1.InvoluteInterference2)
-    textbox.insert("end","\n# Trimming Interference 1 : "+P1.TrimmingInterference1)
+        textbox.insert("end","* Involute Interference Condition 2 : "+P1.InvoluteInterference2+"\n")
+    textbox.insert("end","* Trimming Interference 1 : "+P1.TrimmingInterference1+"\n")
     if P1.TYPE!=0:
-        textbox.insert("end","\n# Trimming Interference 2 : "+P1.TrimmingInterference2)
-    textbox.insert("end","\n# Teeth Numbers which is Integer 1 : "+P1.TeethNumberInteger1)
+        textbox.insert("end","* Trimming Interference 2 : "+P1.TrimmingInterference2+"\n")
+    textbox.insert("end","* Teeth Numbers which is Integer 1 : "+P1.TeethNumberInteger1+"\n")
     if P1.TYPE!=0:
-        textbox.insert("end","\n# Teeth Numbers which is Integer 2 : "+P1.TeethNumberInteger2)
+        textbox.insert("end","* Teeth Numbers which is Integer 2 : "+P1.TeethNumberInteger2+"\n\n")
     ### P1
     if P1.TYPE!=0:
-        textbox.insert("end","\n\n##### Wolfrom Planetary Gear Set")
-        textbox.insert("end","\n### Ratio")
-        textbox.insert("end","\nRatio (Sun-Planet1) = "+str(P1.Gp1s))
-        textbox.insert("end","\nRatio (Planet2-Ring2) = "+str(P1.Gr2p2))
-        textbox.insert("end","\nRatio Total (Ring2 Fiexed, Carrier Output) = "+str(P1.G1))
-        textbox.insert("end","\nRatio Total (Carrier Fixed, Ring2 Output) = "+str(P1.G2))
-        textbox.insert("end","\nRatio Total (Type-3K : Carrier Free, Ring2 Output) = "+str(P1.G22))
-        textbox.insert("end","\n### Size")
-        textbox.insert("end","\nSun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]")
-        textbox.insert("end","\nPlanet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]")
-        textbox.insert("end","\nRing1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]")
-        textbox.insert("end","\nSun2 = "+str(P1.Ds2)+" [mm],  "+str(P1.Zs2)+" [ea]")
-        textbox.insert("end","\nPlanet2 = "+str(P1.Dp2)+" [mm],  "+str(P1.Zp2)+" [ea]")
-        textbox.insert("end","\nRing2 = "+str(P1.Dr2)+" [mm],  "+str(P1.Zr2)+" [ea]")
+        textbox.insert("end","## Wolfrom Planetary Gear Set"+"\n\n")
+        textbox.insert("end","### Ratio"+"\n")
+        textbox.insert("end","* Ratio (Sun-Planet1) = "+str(P1.Gp1s)+"\n")
+        textbox.insert("end","* Ratio (Planet2-Ring2) = "+str(P1.Gr2p2)+"\n")
+        textbox.insert("end","* Ratio Total (Ring2 Fiexed, Carrier Output) = "+str(P1.G1)+"\n")
+        textbox.insert("end","* Ratio Total (Carrier Fixed, Ring2 Output) = "+str(P1.G2)+"\n")
+        textbox.insert("end","* Ratio Total (Type-3K : Carrier Free, Ring2 Output) = "+str(P1.G22)+"\n\n")
+        textbox.insert("end","### Size"+"\n")
+        textbox.insert("end","* Sun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]"+"\n")
+        textbox.insert("end","* Planet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]"+"\n")
+        textbox.insert("end","* Ring1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]"+"\n")
+        textbox.insert("end","* Sun2 = "+str(P1.Ds2)+" [mm],  "+str(P1.Zs2)+" [ea]"+"\n")
+        textbox.insert("end","* Planet2 = "+str(P1.Dp2)+" [mm],  "+str(P1.Zp2)+" [ea]"+"\n")
+        textbox.insert("end","* Ring2 = "+str(P1.Dr2)+" [mm],  "+str(P1.Zr2)+" [ea]"+"\n\n")
     else:
-        textbox.insert("end","\n\n##### Simple Planetary Gear Set")
-        textbox.insert("end","\n### Ratio")
-        textbox.insert("end","\nRatio (Sun-Planet1) = "+str(P1.Gp1s))
-        textbox.insert("end","\nRatio (Total, Carrier Output) = "+str(P1.G3)+" (1-stage),  "+str(P1.G3**2)+" (2-stages),  "+str(P1.G3**3)+" (3-stages)")
-        textbox.insert("end","\nRatio (Total, Ring1 Output) = "+str(P1.G4)+" (1-stage),  "+str(P1.G4**2)+" (2-stages),  "+str(P1.G4**3)+" (3-stages)")
-        textbox.insert("end","\n### Size")
-        textbox.insert("end","\nSun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]")
-        textbox.insert("end","\nPlanet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]")
-        textbox.insert("end","\nRing1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]")
+        textbox.insert("end","##### Simple Planetary Gear Set"+"\n\n")
+        textbox.insert("end","### Ratio"+"\n")
+        textbox.insert("end","* Ratio (Sun-Planet1) = "+str(P1.Gp1s)+"\n"+"\n")
+        textbox.insert("end","* Ratio (Total, Carrier Output) = \n"+str(P1.G3)+" (1-stage),  "+str(P1.G3**2)+" (2-stages),  "+str(P1.G3**3)+" (3-stages)"+"\n")
+        textbox.insert("end","* Ratio (Total, Ring1 Output) = "+str(P1.G4)+" (1-stage),  "+str(P1.G4**2)+" (2-stages),  "+str(P1.G4**3)+" (3-stages)"+"\n\n")
+        textbox.insert("end","### Size"+"\n")
+        textbox.insert("end","* Sun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]"+"\n")
+        textbox.insert("end","* Planet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]"+"\n")
+        textbox.insert("end","* Ring1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]"+"\n\n")
     ### Gs1, Gp1, Gr1, Gs2, Gp2, Gr2
     temp = ['Gs1', 'Gp1', 'Gr1']
     if P1.TYPE!=0:
         temp = ['Gs1', 'Gp1', 'Gr1', 'Gs2', 'Gp2', 'Gr2']
     for i in temp:
-        textbox.insert("end","\n\n##### "+str(i))
-        textbox.insert("end","\nModule = "+str(eval(i).M)+" [mm]")
-        textbox.insert("end","\nPressure Angle = "+str(eval(i).ALPHA)+" [deg]")
+        textbox.insert("end","### "+str(i)+"\n")
+        textbox.insert("end","* Module = "+str(eval(i).M)+" [mm]"+"\n")
+        textbox.insert("end","* Pressure Angle = "+str(eval(i).ALPHA)+" [deg]"+"\n")
         if str(i)=='Gr1' or str(i)=='Gr2':
-            textbox.insert("end","\nTeeth Number = -"+str(eval(i).Z)+" [ea]")
+            textbox.insert("end","* Teeth Number = -"+str(eval(i).Z)+" [ea]"+"\n")
         else:
-            textbox.insert("end","\nTeeth Number = "+str(eval(i).Z)+" [ea]")
-        textbox.insert("end","\nOffset Factor = "+str(eval(i).X)+"")
-        textbox.insert("end","\nOffset = "+str(eval(i).X*eval(i).M)+" [mm]")
-        textbox.insert("end","\nBacklash Factor = "+str(eval(i).B)+"")
-        textbox.insert("end","\nBacklash = "+str(eval(i).B*eval(i).M)+" [mm]")
-        textbox.insert("end","\nAddendum Factor = "+str(eval(i).A)+"")
-        textbox.insert("end","\nAddendum = "+str(eval(i).A*eval(i).M)+" [mm]")
-        textbox.insert("end","\nDedendum Factor = "+str(eval(i).D)+"")
-        textbox.insert("end","\nDedendum = "+str(eval(i).D*eval(i).M)+" [mm]")
-        textbox.insert("end","\nTotal Tooth Height = "+str((eval(i).A+eval(i).D)*eval(i).M)+" [mm]")
-        textbox.insert("end","\nBase Circle Dia = "+str(eval(i).M*eval(i).Z*np.cos(np.deg2rad(eval(i).ALPHA)))+" [mm]")
-        textbox.insert("end","\nPitch Circle Dia = "+str(eval(i).M*eval(i).Z)+" [mm]")
-        textbox.insert("end","\nOffset Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X))+" [mm]")
-        textbox.insert("end","\nRoot Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X-eval(i).D))+" [mm]")
-        textbox.insert("end","\nOuter Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X+eval(i).A))+" [mm]")
+            textbox.insert("end","* Teeth Number = "+str(eval(i).Z)+" [ea]"+"\n")
+        textbox.insert("end","* Offset Factor = "+str(eval(i).X)+""+"\n")
+        textbox.insert("end","* Offset = "+str(eval(i).X*eval(i).M)+" [mm]"+"\n")
+        textbox.insert("end","* Backlash Factor = "+str(eval(i).B)+""+"\n")
+        textbox.insert("end","* Backlash = "+str(eval(i).B*eval(i).M)+" [mm]"+"\n")
+        textbox.insert("end","* Addendum Factor = "+str(eval(i).A)+""+"\n")
+        textbox.insert("end","* Addendum = "+str(eval(i).A*eval(i).M)+" [mm]"+"\n")
+        textbox.insert("end","* Dedendum Factor = "+str(eval(i).D)+""+"\n")
+        textbox.insert("end","* Dedendum = "+str(eval(i).D*eval(i).M)+" [mm]"+"\n")
+        textbox.insert("end","* Total Tooth Height = "+str((eval(i).A+eval(i).D)*eval(i).M)+" [mm]"+"\n")
+        textbox.insert("end","* Base Circle Dia = "+str(eval(i).M*eval(i).Z*np.cos(np.deg2rad(eval(i).ALPHA)))+" [mm]"+"\n")
+        textbox.insert("end","* Pitch Circle Dia = "+str(eval(i).M*eval(i).Z)+" [mm]"+"\n")
+        textbox.insert("end","* Offset Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X))+" [mm]"+"\n")
+        textbox.insert("end","* Root Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X-eval(i).D))+" [mm]"+"\n")
+        textbox.insert("end","* Outer Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X+eval(i).A))+" [mm]"+"\n\n")
+
+def save_parameters():
+    WorkingDirectory = "./Result"
+    temp = ['Gs1', 'Gp1', 'Gr1']
+    if P1.TYPE!=0:
+        temp = ['Gs1', 'Gp1', 'Gr1', 'Gs2', 'Gp2', 'Gr2']
+    os.makedirs(WorkingDirectory, exist_ok=True)
+    f1=open(WorkingDirectory+'/PGS.md','w')
+    f1.write(textbox.get('0.0','end'))
+    f1.close()
+    for i in temp:
+        temp2 = WorkingDirectory+"/"+i
+        os.makedirs(temp2, exist_ok=True)
+        f2=open(temp2+'/Inputs.csv','w')
+        f2.write('parameter,value'+'\n')
+        f2.write('m,'+str(eval(i).M)+'\n')
+        f2.write('z,'+str(eval(i).Z)+'\n')
+        f2.write('alpha,'+str(eval(i).ALPHA)+'\n')
+        f2.write('x,'+str(eval(i).X)+'\n')
+        f2.write('b,'+str(eval(i).B)+'\n')
+        f2.write('a,'+str(eval(i).A)+'\n')
+        f2.write('d,'+str(eval(i).D)+'\n')
+        f2.write('c,'+str(eval(i).C)+'\n')
+        f2.write('e,'+str(eval(i).E)+'\n')
+        f2.write('x_0,'+str(eval(i).X_0)+'\n')
+        f2.write('y_0,'+str(eval(i).Y_0)+'\n')
+        f2.write('seg_circle,'+str(eval(i).SEG_CIRCLE)+'\n')
+        f2.write('seg_involute,'+str(eval(i).SEG_INVOLUTE)+'\n')
+        f2.write('seg_edge_r,'+str(eval(i).SEG_EDGE_R)+'\n')
+        f2.write('seg_root_r,'+str(eval(i).SEG_ROOT_R)+'\n')
+        f2.write('seg_outer,'+str(eval(i).SEG_OUTER)+'\n')
+        f2.write('seg_root,'+str(eval(i).SEG_ROOT)+'\n')
+        f2.write('scale,'+'0.7'+'\n')
+        f2.close()
 
 ################
 # Callback
@@ -255,6 +292,7 @@ def button_run_callback():
     read_parameters()
     calcGPG()
     OutputText()
+    save_parameters()
     PlotPGS()
 
 def button_exit_callback():
