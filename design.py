@@ -184,23 +184,8 @@ def OutputText():
     textbox.delete("0.0", "end")
     textbox.insert("0.0", "# PGS - Planetary Gear Sizing Program\n\n")
     textbox.insert("end", "![](./PGS.png)\n\n")
-    ### Input Parameters
-    textbox.insert("end","## Input Parameters\n\n")
-    textbox.insert("end","* Type, TYPE = "+str(int(P1.TYPE))+"\n")
-    textbox.insert("end","* Module, m = "+str(float(P1.m))+"\n")
-    textbox.insert("end","* Planets Number, Np = "+str(int(P1.Np))+"\n")
-    textbox.insert("end","* Zr2/Np = "+str(int(P1.Zr2_MultipleNp))+"\n")
-    textbox.insert("end","* Zs1/Np = "+str(int(P1.Zs1_MultipleNp))+"\n")
-    textbox.insert("end","* Shift Factor, Gs1.X = "+str(float(Gs1.X))+"\n")
-    textbox.insert("end","* Shift Factor, Gs2.X = "+str(float(Gs2.X))+"\n")
-    textbox.insert("end","* Backlash Factor, B = "+str(float(Gs1.B))+"\n")
-    textbox.insert("end","* Addendum Factor, A = "+str(float(Gs1.A))+"\n")
-    textbox.insert("end","* Dedendum Factor, D = "+str(float(Gs1.D))+"\n")
-    textbox.insert("end","* Pressure Angle, alpha = "+str(float(Gs1.ALPHA))+"\n")
-    textbox.insert("end","* Radius of Hib End, C = "+str(float(Gs1.C))+"\n")
-    textbox.insert("end","* Radius of Tooth End, E = "+str(float(Gs1.E))+"\n\n")
     ### Check Geometrical Conditions 
-    textbox.insert("end","## Check Geometrical Conditions\n\n")
+    textbox.insert("end","## Check Geometrical Conditions\n")
     textbox.insert("end","* Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : "+P1.NonFactorizing1+"\n")
     if P1.TYPE!=0:
         textbox.insert("end","* Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : "+P1.NonFactorizing2+"\n")
@@ -220,6 +205,21 @@ def OutputText():
     if P1.TYPE!=0:
         textbox.insert("end","* Teeth Numbers which is Integer 2 : "+P1.TeethNumberInteger2+"\n")
     textbox.insert("end","\n")
+    ### Input Parameters
+    textbox.insert("end","## Input Parameters\n")
+    textbox.insert("end","* Type, TYPE = "+str(int(P1.TYPE))+"\n")
+    textbox.insert("end","* Module, m = "+str(float(P1.m))+"\n")
+    textbox.insert("end","* Planets Number, Np = "+str(int(P1.Np))+"\n")
+    textbox.insert("end","* Zr2/Np = "+str(int(P1.Zr2_MultipleNp))+"\n")
+    textbox.insert("end","* Zs1/Np = "+str(int(P1.Zs1_MultipleNp))+"\n")
+    textbox.insert("end","* Shift Factor, Gs1.X = "+str(float(Gs1.X))+"\n")
+    textbox.insert("end","* Shift Factor, Gs2.X = "+str(float(Gs2.X))+"\n")
+    textbox.insert("end","* Backlash Factor, B = "+str(float(Gs1.B))+"\n")
+    textbox.insert("end","* Addendum Factor, A = "+str(float(Gs1.A))+"\n")
+    textbox.insert("end","* Dedendum Factor, D = "+str(float(Gs1.D))+"\n")
+    textbox.insert("end","* Pressure Angle, alpha = "+str(float(Gs1.ALPHA))+"\n")
+    textbox.insert("end","* Radius of Hib End, C = "+str(float(Gs1.C))+"\n")
+    textbox.insert("end","* Radius of Tooth End, E = "+str(float(Gs1.E))+"\n\n")
     ### P1
     if P1.TYPE!=0:
         textbox.insert("end","## Wolfrom Planetary Gear Set"+"\n\n")

@@ -77,8 +77,6 @@ class PGS:
     def Checks(self):
         # Checks
         print("\n\n### Checks")
-        ### ������ �������� ������ �¹��� ������ ġ���� ���°� ���� �ٸ��� Ȯ��
-        ### ������ �� ���� �߻��ϵ��� �ϴ� ���� (���û���)
         ## Sequential Mesh Condition (Non-Factorizing) 1
         print("# Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : ")
         if (self.Zs1%self.Np)!=0 and (-self.Zr1%self.Np)!=0:
@@ -96,8 +94,6 @@ class PGS:
             else:
                 print("No good for noise")
                 self.NonFactorizing2 = "No good for noise"
-        ### ��� ��ġ����
-        ### ������ ������ ������ �ΰ� ��ġ�Ǿ�� ��
         ## Check Planets Numbers (Equal Distance Condition) 1
         print("# Planet Numbers (Equal Distance Condition) 1 : ")
         if self.TYPE==2:
@@ -123,8 +119,6 @@ class PGS:
             else:
                 print("Fail")
                 self.EqualDistance2 = "Fail"
-        ### ��ø ���� ����
-        ### ������� ���̿� ��ø�� ����� ��
         ## Check Planets Interference (Non-Overlap Condition) 1
         print("# Planets Interference (Non-Overlap Condition) 1 : ")
         if self.alpha==20 and self.Np<(np.pi/np.arcsin((self.Zp1+2)/(self.Zp1+self.Zs1))):
@@ -144,8 +138,6 @@ class PGS:
                 self.PlanetsInterference2 = "Fail"
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
-        ### �κ���Ʈ ��������
-        ### ��������� �ռ��� ���� ��, ��������� �̻Ѹ��� ������� �̳��� ������ ����ų �� ����
         ## Check Involute Interference Condition 1
         print("# Involute Interference Condition 1 : ")
         temp=(self.Zp1*np.sin(np.deg2rad(self.alpha)))**2
@@ -169,9 +161,6 @@ class PGS:
                 self.InvoluteInterference2 = "Fail"
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
-        ### Ʈ���� ��������
-        ### ���� ������ ������ ��, �߽ɿ��� �ܰ����� �����ִ� ��� ���� �߻� ����
-        ### Ʈ���� ������ ���ϱ� ���ؼ��� +���� ������ �ָ� ������
         ## Check Trimming Interference 1
         print("# Trimming Interference 1 : ")
         if self.alpha==20 and (-self.Zr1-self.Zp1)>=16:
@@ -192,7 +181,6 @@ class PGS:
         if self.alpha!=20:
             print("No Check (Non-Standard) ")
             self.TrimmingInterference1 = "No Check (Non-Standard)"
-        ### �� ����� �ռ��� �������� ���� �Ǻ�
         ## Check Teeth Numbers which is Integer
         print("# Teeth Numbers which is Integer 1 : ")
         if round(float(self.Zs1),6).is_integer() and round(float(self.Zp1),6).is_integer() and round(float(self.Zr1),6).is_integer():
