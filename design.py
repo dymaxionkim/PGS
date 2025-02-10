@@ -171,7 +171,12 @@ def PlotPGS():
     # Plot show
     plt.axis("equal")
     plt.grid(True)
-    plt.savefig('./Result/PGS.png',dpi=100)
+    if int(entry_PlotOption.get())==1:
+        plt.savefig('./Result/PGS1.png',dpi=100)
+    elif int(entry_PlotOption.get())==2:
+        plt.savefig('./Result/PGS2.png',dpi=100)
+    else:
+        plt.savefig('./Result/PGS.png',dpi=100)
     plt.show()
 
 def OutputText():
@@ -179,6 +184,21 @@ def OutputText():
     textbox.delete("0.0", "end")
     textbox.insert("0.0", "# PGS - Planetary Gear Sizing Program\n\n")
     textbox.insert("end", "![](./PGS.png)\n\n")
+    ### Input Parameters
+    textbox.insert("end","## Input Parameters\n\n")
+    textbox.insert("end","* Type, TYPE = "+str(int(P1.TYPE))+"\n")
+    textbox.insert("end","* Module, m = "+str(float(P1.m))+"\n")
+    textbox.insert("end","* Planets Number, Np = "+str(int(P1.Np))+"\n")
+    textbox.insert("end","* Zr2/Np = "+str(int(P1.Zr2_MultipleNp))+"\n")
+    textbox.insert("end","* Zs1/Np = "+str(int(P1.Zs1_MultipleNp))+"\n")
+    textbox.insert("end","* Shift Factor, Gs1.X = "+str(float(Gs1.X))+"\n")
+    textbox.insert("end","* Shift Factor, Gs2.X = "+str(float(Gs2.X))+"\n")
+    textbox.insert("end","* Backlash Factor, B = "+str(float(Gs1.B))+"\n")
+    textbox.insert("end","* Addendum Factor, A = "+str(float(Gs1.A))+"\n")
+    textbox.insert("end","* Dedendum Factor, D = "+str(float(Gs1.D))+"\n")
+    textbox.insert("end","* Pressure Angle, alpha = "+str(float(Gs1.ALPHA))+"\n")
+    textbox.insert("end","* Radius of Hib End, C = "+str(float(Gs1.C))+"\n")
+    textbox.insert("end","* Radius of Tooth End, E = "+str(float(Gs1.E))+"\n\n")
     ### Check Geometrical Conditions 
     textbox.insert("end","## Check Geometrical Conditions\n\n")
     textbox.insert("end","* Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : "+P1.NonFactorizing1+"\n")
@@ -198,7 +218,8 @@ def OutputText():
         textbox.insert("end","* Trimming Interference 2 : "+P1.TrimmingInterference2+"\n")
     textbox.insert("end","* Teeth Numbers which is Integer 1 : "+P1.TeethNumberInteger1+"\n")
     if P1.TYPE!=0:
-        textbox.insert("end","* Teeth Numbers which is Integer 2 : "+P1.TeethNumberInteger2+"\n\n")
+        textbox.insert("end","* Teeth Numbers which is Integer 2 : "+P1.TeethNumberInteger2+"\n")
+    textbox.insert("end","\n")
     ### P1
     if P1.TYPE!=0:
         textbox.insert("end","## Wolfrom Planetary Gear Set"+"\n\n")
@@ -218,22 +239,24 @@ def OutputText():
         textbox.insert("end","* Sun2 = "+str(P1.Ds2)+" [mm],  "+str(P1.Zs2)+" [ea]"+"\n")
         textbox.insert("end","* Planet2 = "+str(P1.Dp2)+" [mm],  "+str(P1.Zp2)+" [ea]"+"\n")
         textbox.insert("end","* Ring2 = "+str(P1.Dr2)+" [mm],  "+str(P1.Zr2)+" [ea]"+"\n")
-        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n\n")
+        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n")
+        textbox.insert("end","* Number of Planets = "+str(P1.Np)+" [ea]"+"\n\n")
     else:
-        textbox.insert("end","##### Simple Planetary Gear Set"+"\n\n")
+        textbox.insert("end","## Simple Planetary Gear Set"+"\n\n")
         textbox.insert("end","### Ratio"+"\n")
-        textbox.insert("end","* Ratio (Sun-Planet1) = "+str(P1.Gp1s)+"\n"+"\n")
+        textbox.insert("end","* Ratio (Sun-Planet1) = "+str(P1.Gp1s)+"\n")
         textbox.insert("end","* Ratio (Total, Carrier Output) (1-stage) = "+str(P1.G3)+"\n")
         textbox.insert("end","* Ratio (Total, Carrier Output) (2-stages) = "+str(P1.G3**2)+"\n")
         textbox.insert("end","* Ratio (Total, Carrier Output) (3-stages) = "+str(P1.G3**3)+"\n")
         textbox.insert("end","* Ratio (Total, Ring1 Output) (1-stage) = "+str(P1.G4)+"\n")
         textbox.insert("end","* Ratio (Total, Ring1 Output) (2-stages) = "+str(P1.G4**2)+"\n")
-        textbox.insert("end","* Ratio (Total, Ring1 Output) (3-stages) = "+str(P1.G4**3)+"\n")
+        textbox.insert("end","* Ratio (Total, Ring1 Output) (3-stages) = "+str(P1.G4**3)+"\n\n")
         textbox.insert("end","### Size"+"\n")
         textbox.insert("end","* Sun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]"+"\n")
         textbox.insert("end","* Planet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]"+"\n")
         textbox.insert("end","* Ring1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]"+"\n")
-        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n\n")
+        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n")
+        textbox.insert("end","* Number of Planets = "+str(P1.Np)+" [ea]"+"\n\n")
     ### Gs1, Gp1, Gr1, Gs2, Gp2, Gr2
     temp = ['Gs1', 'Gp1', 'Gr1']
     if P1.TYPE!=0:
@@ -434,7 +457,7 @@ label2_E = customtkinter.CTkLabel(app, text="[mm]", fg_color="transparent", comp
 label2_E.grid(row=15, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Plot Options
-label1_PlotOption = customtkinter.CTkLabel(app, text="Plot Options = ", fg_color="transparent", compound="right")
+label1_PlotOption = customtkinter.CTkLabel(app, text="Plot Options = ", fg_color="transparent", compound="right", font=font16)
 label1_PlotOption.grid(row=16, column=0, padx=PADX, pady=PADY, sticky="e")
 entry_PlotOption = customtkinter.CTkEntry(app, placeholder_text="1")
 entry_PlotOption.grid(row=16, column=1, padx=PADX, pady=PADY)
