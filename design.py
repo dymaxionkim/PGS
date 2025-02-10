@@ -218,7 +218,7 @@ def OutputText():
         textbox.insert("end","* Sun2 = "+str(P1.Ds2)+" [mm],  "+str(P1.Zs2)+" [ea]"+"\n")
         textbox.insert("end","* Planet2 = "+str(P1.Dp2)+" [mm],  "+str(P1.Zp2)+" [ea]"+"\n")
         textbox.insert("end","* Ring2 = "+str(P1.Dr2)+" [mm],  "+str(P1.Zr2)+" [ea]"+"\n")
-        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm],  "+"\n\n")
+        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n\n")
     else:
         textbox.insert("end","##### Simple Planetary Gear Set"+"\n\n")
         textbox.insert("end","### Ratio"+"\n")
@@ -233,7 +233,7 @@ def OutputText():
         textbox.insert("end","* Sun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]"+"\n")
         textbox.insert("end","* Planet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]"+"\n")
         textbox.insert("end","* Ring1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]"+"\n")
-        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm],  "+"\n\n")
+        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n\n")
     ### Gs1, Gp1, Gr1, Gs2, Gp2, Gr2
     temp = ['Gs1', 'Gp1', 'Gr1']
     if P1.TYPE!=0:
