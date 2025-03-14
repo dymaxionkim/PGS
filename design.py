@@ -266,9 +266,9 @@ def OutputText():
         textbox.insert("end","* Module = "+str(eval(i).M)+" [mm]"+"\n")
         textbox.insert("end","* Pressure Angle = "+str(eval(i).ALPHA)+" [deg]"+"\n")
         if str(i)=='Gr1' or str(i)=='Gr2':
-            textbox.insert("end","* Teeth Number = -"+str(eval(i).Z)+" [ea]"+"\n")
+            textbox.insert("end","* Teeth Number = -"+str(round(eval(i).Z,6))+" [ea]"+"\n")
         else:
-            textbox.insert("end","* Teeth Number = "+str(eval(i).Z)+" [ea]"+"\n")
+            textbox.insert("end","* Teeth Number = "+str(round(eval(i).Z,6))+" [ea]"+"\n")
         textbox.insert("end","* Offset Factor = "+str(eval(i).X)+""+"\n")
         textbox.insert("end","* Offset = "+str(eval(i).X*eval(i).M)+" [mm]"+"\n")
         textbox.insert("end","* Backlash Factor = "+str(eval(i).B)+""+"\n")
@@ -299,12 +299,22 @@ def save_parameters():
         f2=open(temp2+'/Inputs.csv','w')
         f2.write('parameter,value'+'\n')
         f2.write('m,'+str(eval(i).M)+'\n')
-        f2.write('z,'+str(eval(i).Z)+'\n')
+        if i=='Gr1' or i=='Gr2':
+            f2.write('z,'+str(-round(eval(i).Z,6))+'\n')
+        else:
+            f2.write('z,'+str(round(eval(i).Z,6))+'\n')
         f2.write('alpha,'+str(eval(i).ALPHA)+'\n')
         f2.write('x,'+str(eval(i).X)+'\n')
-        f2.write('b,'+str(eval(i).B)+'\n')
-        f2.write('a,'+str(eval(i).A)+'\n')
-        f2.write('d,'+str(eval(i).D)+'\n')
+        if i=='Gr1' or i=='Gr2':
+            f2.write('b,'+str(-eval(i).B)+'\n')
+        else :
+            f2.write('b,'+str(eval(i).B)+'\n')
+        if i=='Gr1' or i=='Gr2':
+            f2.write('a,'+str(eval(i).D)+'\n')
+            f2.write('d,'+str(eval(i).A)+'\n')
+        else :
+            f2.write('a,'+str(eval(i).A)+'\n')
+            f2.write('d,'+str(eval(i).D)+'\n')
         f2.write('c,'+str(eval(i).C)+'\n')
         f2.write('e,'+str(eval(i).E)+'\n')
         f2.write('x_0,'+str(eval(i).X_0)+'\n')

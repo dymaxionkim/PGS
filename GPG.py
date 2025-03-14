@@ -128,7 +128,7 @@ class GPG:
     def RootRoundCurve(self):
         self.THETA_T = np.linspace(0,self.THETA_TE,self.SEG_ROOT_R)
         if (self.C!=0) and ((self.D-self.X-self.C)==0) :
-            # mcë¥¼ ë°˜ì§€ë¦„ìœ¼ë¡œ í•˜ëŠ” ì›í˜¸ë¥¼ ê·¸ë ¤ì„œ ëŒ€ì²´í•˜ê²Œ ë¨
+            # mcë¥? ë°˜ì??ë¦„ìœ¼ë¡? ?•˜?Š” ?›?˜¸ë¥? ê·¸ë ¤?„œ ???ì²´í•˜ê²? ?¨
             self.THETA_S = (np.pi/2)*np.ones(len(self.THETA_T))
         elif (self.D-self.X-self.C)!=0 :
             self.THETA_S = np.arctan((self.M*self.Z*self.THETA_T/2)/(self.M*self.D-self.M*self.X-self.M*self.C))
@@ -205,7 +205,7 @@ class GPG:
     def TotalTeeth(self):
         Xtemp = []
         Ytemp = []
-        for i in range(0,int(self.Z)):
+        for i in range(0,int(round(self.Z,6))):
             Xtemp = np.concatenate((Xtemp, np.cos(-self.P_ANGLE*i)*self.X4-np.sin(-self.P_ANGLE*i)*self.Y4))
             Ytemp = np.concatenate((Ytemp, np.sin(-self.P_ANGLE*i)*self.X4+np.cos(-self.P_ANGLE*i)*self.Y4))
         self.X5 = Xtemp
