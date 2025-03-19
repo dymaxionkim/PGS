@@ -304,9 +304,12 @@ def save_parameters():
         else:
             f2.write('z,'+str(round(eval(i).Z,6))+'\n')
         f2.write('alpha,'+str(eval(i).ALPHA)+'\n')
-        f2.write('x,'+str(eval(i).X)+'\n')
         if i=='Gr1' or i=='Gr2':
-            f2.write('b,'+str(eval(i).B)+'\n')
+            f2.write('x,'+str(-eval(i).X)+'\n')
+        else :
+            f2.write('x,'+str(eval(i).X)+'\n')
+        if i=='Gr1' or i=='Gr2':
+            f2.write('b,'+str(-eval(i).B)+'\n')
         else :
             f2.write('b,'+str(eval(i).B)+'\n')
         if i=='Gr1' or i=='Gr2':
