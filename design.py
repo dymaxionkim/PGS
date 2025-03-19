@@ -306,7 +306,7 @@ def save_parameters():
         f2.write('alpha,'+str(eval(i).ALPHA)+'\n')
         f2.write('x,'+str(eval(i).X)+'\n')
         if i=='Gr1' or i=='Gr2':
-            f2.write('b,'+str(-eval(i).B)+'\n')
+            f2.write('b,'+str(eval(i).B)+'\n')
         else :
             f2.write('b,'+str(eval(i).B)+'\n')
         if i=='Gr1' or i=='Gr2':
