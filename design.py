@@ -1,5 +1,5 @@
-import customtkinter
-from customtkinter import filedialog
+import tkinter
+from tkinter import filedialog
 import os
 import sys
 import numpy as np
@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas
 from GPG import GPG
 from PGS import PGS
+import tkinter.font as font
 
 ################
 # Functions
@@ -346,147 +347,146 @@ def button_exit_callback():
 
 ################
 # GUI Setting
-customtkinter.set_default_color_theme("green")
-app = customtkinter.CTk()
-app.title("PGS with customtkinter")
-app.geometry("950x600")
+app = tkinter.Tk()
+app.title("PGS with tkinter")
+#app.geometry("950x600")
 app.resizable(width=False, height=False)
-font16 = customtkinter.CTkFont(size=16)
+font16 = font.Font(size=12)
 if ( sys.platform.startswith('win')): app.iconbitmap('PGS.ico')
-## Gap between pads in customtkinter
+## Gap between pads in tkinter
 PADX = 1
 PADY = 1
 
 ## Subject
-label_P1 = customtkinter.CTkLabel(app, text="# Planetary System", fg_color="transparent", compound="right", font=font16)
+label_P1 = tkinter.Label(app, text="# Planetary System", font=font16)
 label_P1.grid(row=0, column=0, padx=PADX, pady=PADY, sticky="w")
 
 ## Type, TYPE
-label1_TYPE = customtkinter.CTkLabel(app, text="Type, TYPE = ", fg_color="transparent", compound="right")
+label1_TYPE = tkinter.Label(app, text="Type, TYPE = ")
 label1_TYPE.grid(row=1, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_TYPE = customtkinter.CTkEntry(app, placeholder_text="1")
+entry_TYPE = tkinter.Entry(app)
 entry_TYPE.grid(row=1, column=1, padx=PADX, pady=PADY)
-label2_TYPE = customtkinter.CTkLabel(app, text="0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2)", fg_color="transparent", compound="left")
+label2_TYPE = tkinter.Label(app, text="0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2)")
 label2_TYPE.grid(row=2, column=1, padx=PADX, pady=PADY, sticky="w", columnspan=3)
 
 ## Module, m
-label1_m = customtkinter.CTkLabel(app, text="Module, m = ", fg_color="transparent", compound="right")
+label1_m = tkinter.Label(app, text="Module, m = ")
 label1_m.grid(row=3, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_m = customtkinter.CTkEntry(app, placeholder_text="1.0")
+entry_m = tkinter.Entry(app)
 entry_m.grid(row=3, column=1, padx=PADX, pady=PADY)
-label2_m = customtkinter.CTkLabel(app, text="[mm] > 0", fg_color="transparent", compound="left")
+label2_m = tkinter.Label(app, text="[mm] > 0")
 label2_m.grid(row=3, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Planets Number, Np
-label1_Np = customtkinter.CTkLabel(app, text="Planets Number, Np = ", fg_color="transparent", compound="right")
+label1_Np = tkinter.Label(app, text="Planets Number, Np = ")
 label1_Np.grid(row=4, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Np = customtkinter.CTkEntry(app, placeholder_text="4")
+entry_Np = tkinter.Entry(app)
 entry_Np.grid(row=4, column=1, padx=PADX, pady=PADY)
-label2_Np = customtkinter.CTkLabel(app, text="[ea] > 2", fg_color="transparent", compound="left")
+label2_Np = tkinter.Label(app, text="[ea] > 2")
 label2_Np.grid(row=4, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Zr2/Np
-label1_Zr2overNp = customtkinter.CTkLabel(app, text="Zr2/Np = ", fg_color="transparent", compound="right")
+label1_Zr2overNp = tkinter.Label(app, text="Zr2/Np = ")
 label1_Zr2overNp.grid(row=5, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Zr2overNp = customtkinter.CTkEntry(app, placeholder_text="15")
+entry_Zr2overNp = tkinter.Entry(app)
 entry_Zr2overNp.grid(row=5, column=1, padx=PADX, pady=PADY)
-label2_Zr2overNp = customtkinter.CTkLabel(app, text="...", fg_color="transparent", compound="left")
+label2_Zr2overNp = tkinter.Label(app, text="...")
 label2_Zr2overNp.grid(row=5, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Zs1/Np
-label1_Zs1overNp = customtkinter.CTkLabel(app, text="Zs1/Np = ", fg_color="transparent", compound="right")
+label1_Zs1overNp = tkinter.Label(app, text="Zs1/Np = ")
 label1_Zs1overNp.grid(row=6, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Zs1overNp = customtkinter.CTkEntry(app, placeholder_text="8")
+entry_Zs1overNp = tkinter.Entry(app)
 entry_Zs1overNp.grid(row=6, column=1, padx=PADX, pady=PADY)
-label2_Zs1overNp = customtkinter.CTkLabel(app, text="...", fg_color="transparent", compound="left")
+label2_Zs1overNp = tkinter.Label(app, text="...")
 label2_Zs1overNp.grid(row=6, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Subject
-label_G = customtkinter.CTkLabel(app, text="# Involute Gear Spec", fg_color="transparent", compound="right", font=font16)
+label_G = tkinter.Label(app, text="# Involute Gear Spec", font=font16)
 label_G.grid(row=7, column=0, padx=PADX, pady=PADY, sticky="w")
 
 ## Shift Factor, Gs1.X
-label1_Gs1X = customtkinter.CTkLabel(app, text="Shift Factor, Gs1.X = ", fg_color="transparent", compound="right")
+label1_Gs1X = tkinter.Label(app, text="Shift Factor, Gs1.X = ")
 label1_Gs1X.grid(row=8, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Gs1X = customtkinter.CTkEntry(app, placeholder_text="0.0")
+entry_Gs1X = tkinter.Entry(app)
 entry_Gs1X.grid(row=8, column=1, padx=PADX, pady=PADY)
-label2_Gs1X = customtkinter.CTkLabel(app, text="...", fg_color="transparent", compound="left")
+label2_Gs1X = tkinter.Label(app, text="...")
 label2_Gs1X.grid(row=8, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Shift Factor, Gs2.X
-label1_Gs2X = customtkinter.CTkLabel(app, text="Shift Factor, Gs2.X = ", fg_color="transparent", compound="right")
+label1_Gs2X = tkinter.Label(app, text="Shift Factor, Gs2.X = ")
 label1_Gs2X.grid(row=9, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Gs2X = customtkinter.CTkEntry(app, placeholder_text="0.0")
+entry_Gs2X = tkinter.Entry(app)
 entry_Gs2X.grid(row=9, column=1, padx=PADX, pady=PADY)
-label2_Gs2X = customtkinter.CTkLabel(app, text="...", fg_color="transparent", compound="left")
+label2_Gs2X = tkinter.Label(app, text="...")
 label2_Gs2X.grid(row=9, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Backlash Factor, B
-label1_B = customtkinter.CTkLabel(app, text="Backlash Factor, B = ", fg_color="transparent", compound="right")
+label1_B = tkinter.Label(app, text="Backlash Factor, B = ")
 label1_B.grid(row=10, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_B = customtkinter.CTkEntry(app, placeholder_text="0.0")
+entry_B = tkinter.Entry(app)
 entry_B.grid(row=10, column=1, padx=PADX, pady=PADY)
-label2_B = customtkinter.CTkLabel(app, text="...", fg_color="transparent", compound="left")
+label2_B = tkinter.Label(app, text="...")
 label2_B.grid(row=10, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Addendum Factor, A
-label1_A = customtkinter.CTkLabel(app, text="Addendum Factor, A = ", fg_color="transparent", compound="right")
+label1_A = tkinter.Label(app, text="Addendum Factor, A = ")
 label1_A.grid(row=11, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_A = customtkinter.CTkEntry(app, placeholder_text="1.0")
+entry_A = tkinter.Entry(app)
 entry_A.grid(row=11, column=1, padx=PADX, pady=PADY)
-label2_A = customtkinter.CTkLabel(app, text="...", fg_color="transparent", compound="left")
+label2_A = tkinter.Label(app, text="...")
 label2_A.grid(row=11, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Dedendum Factor, D
-label1_D = customtkinter.CTkLabel(app, text="Dedendum Factor, D = ", fg_color="transparent", compound="right")
+label1_D = tkinter.Label(app, text="Dedendum Factor, D = ")
 label1_D.grid(row=12, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_D = customtkinter.CTkEntry(app, placeholder_text="1.25")
+entry_D = tkinter.Entry(app)
 entry_D.grid(row=12, column=1, padx=PADX, pady=PADY)
-label2_D = customtkinter.CTkLabel(app, text="...", fg_color="transparent", compound="left")
+label2_D = tkinter.Label(app, text="...")
 label2_D.grid(row=12, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Pressure Angle, alpha
-label1_alpha = customtkinter.CTkLabel(app, text="Pressure Angle, alpha = ", fg_color="transparent", compound="right")
+label1_alpha = tkinter.Label(app, text="Pressure Angle, alpha = ")
 label1_alpha.grid(row=13, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_alpha = customtkinter.CTkEntry(app, placeholder_text="20.0")
+entry_alpha = tkinter.Entry(app)
 entry_alpha.grid(row=13, column=1, padx=PADX, pady=PADY)
-label2_alpha = customtkinter.CTkLabel(app, text="[deg]", fg_color="transparent", compound="left")
+label2_alpha = tkinter.Label(app, text="[deg]")
 label2_alpha.grid(row=13, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Radius of Hob End, C
-label1_C = customtkinter.CTkLabel(app, text="Radius of Hob End, C = ", fg_color="transparent", compound="right")
+label1_C = tkinter.Label(app, text="Radius of Hob End, C = ")
 label1_C.grid(row=14, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_C = customtkinter.CTkEntry(app, placeholder_text="0.2")
+entry_C = tkinter.Entry(app)
 entry_C.grid(row=14, column=1, padx=PADX, pady=PADY)
-label2_C = customtkinter.CTkLabel(app, text="[mm]", fg_color="transparent", compound="left")
+label2_C = tkinter.Label(app, text="[mm]")
 label2_C.grid(row=14, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Radius of Tooth End, E
-label1_E = customtkinter.CTkLabel(app, text="Radius of Tooth End, E = ", fg_color="transparent", compound="right")
+label1_E = tkinter.Label(app, text="Radius of Tooth End, E = ")
 label1_E.grid(row=15, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_E = customtkinter.CTkEntry(app, placeholder_text="0.1")
+entry_E = tkinter.Entry(app)
 entry_E.grid(row=15, column=1, padx=PADX, pady=PADY)
-label2_E = customtkinter.CTkLabel(app, text="[mm]", fg_color="transparent", compound="left")
+label2_E = tkinter.Label(app, text="[mm]")
 label2_E.grid(row=15, column=2, padx=PADX, pady=PADY, sticky="w")
 
 ## Plot Options
-label1_PlotOption = customtkinter.CTkLabel(app, text="Plot Options = ", fg_color="transparent", compound="right", font=font16)
+label1_PlotOption = tkinter.Label(app, text="Plot Options = ", font=font16)
 label1_PlotOption.grid(row=16, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_PlotOption = customtkinter.CTkEntry(app, placeholder_text="1")
+entry_PlotOption = tkinter.Entry(app)
 entry_PlotOption.grid(row=16, column=1, padx=PADX, pady=PADY)
-label2_PlotOption = customtkinter.CTkLabel(app, text="1=Stage1, 2=Stage2, 3=Total", fg_color="transparent", compound="left")
+label2_PlotOption = tkinter.Label(app, text="1=Stage1, 2=Stage2, 3=Total")
 label2_PlotOption.grid(row=17, column=1, padx=PADX, pady=PADY, sticky="w")
 
 ## Button Run
-button_run = customtkinter.CTkButton(app, text="Run", command=button_run_callback, width=100)
+button_run = tkinter.Button(app, text="Run", command=button_run_callback, width=10)
 button_run.grid(row=20, column=0, padx=PADX, pady=PADY, sticky="e")
 
 ## Button exit
-button_exit = customtkinter.CTkButton(app, text="Exit", command=button_exit_callback, width=100)
+button_exit = tkinter.Button(app, text="Exit", command=button_exit_callback, width=10)
 button_exit.grid(row=20, column=5, padx=PADX, pady=PADY, sticky="e")
 
 ## Textbox
-textbox = customtkinter.CTkTextbox(master=app, width=550, corner_radius=0)
+textbox = tkinter.Text(master=app, width=70, height = 25)
 textbox.grid(row=3, column=3, sticky="nsew", rowspan=15, columnspan=3)
 textbox.delete("0.0", "end")
 textbox.insert("end", "\n########################################")

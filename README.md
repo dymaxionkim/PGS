@@ -3,10 +3,7 @@
 _Sizing Tool for Planetary Gear Set_
 
 ## Prerequisites
-
-```
-pip install numpy matplotlib customtkinter
-```
+* uv package manager for python
 
 ## Exe script
 * `PGS.bat` for MS Windows
