@@ -350,7 +350,7 @@ def button_exit_callback():
 app = tkinter.Tk()
 app.title("PGS with tkinter")
 #app.geometry("950x600")
-app.resizable(width=False, height=False)
+app.resizable(width=True, height=True)
 font16 = font.Font(size=12)
 if ( sys.platform.startswith('win')): app.iconbitmap('PGS.ico')
 ## Gap between pads in tkinter
