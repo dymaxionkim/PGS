@@ -366,7 +366,7 @@ label1_TYPE = tkinter.Label(app, text="Type, TYPE = ")
 label1_TYPE.grid(row=1, column=0, padx=PADX, pady=PADY, sticky="e")
 entry_TYPE = tkinter.Entry(app)
 entry_TYPE.grid(row=1, column=1, padx=PADX, pady=PADY)
-label2_TYPE = tkinter.Label(app, text="0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2)")
+label2_TYPE = tkinter.Label(app, text="0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2), 4=Wolfrom(diff=3), 5=Wolfrom(diff=4)")
 label2_TYPE.grid(row=2, column=1, padx=PADX, pady=PADY, sticky="w", columnspan=3)
 
 ## Module, m

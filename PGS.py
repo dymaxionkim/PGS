@@ -2,7 +2,7 @@ import numpy as np
 
 class PGS:
     def __init__(self):
-        self.TYPE = 0 # 0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2)
+        self.TYPE = 0 # 0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2), 4=Wolfrom(diff=3), 5=Wolfrom(diff=4)
         self.alpha = 20.0 # Pressure Angle [deg]
         self.m = 0.5 # Common Module
         self.Np = 4  # Planets Number (it must be even number)
@@ -17,6 +17,10 @@ class PGS:
             self.TYPE_DIFF=0.5
         elif self.TYPE==3:
             self.TYPE_DIFF=2.0
+        elif self.TYPE==4:
+            self.TYPE_DIFF=3.0
+        elif self.TYPE==5:
+            self.TYPE_DIFF=4.0
         else:
             self.TYPE_DIFF=1.0
         self.Zr1_MultipleNp = self.Zr2_MultipleNp+self.TYPE_DIFF
