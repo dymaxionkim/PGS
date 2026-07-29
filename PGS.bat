@@ -1,6 +1,6 @@
 REM Start App
-cd /d D:\github\PGS\
+REM cd /d D:\codeberg\PGS\
 uv run design.py
 
-pause
-REM exit
+REM pause
+exit
