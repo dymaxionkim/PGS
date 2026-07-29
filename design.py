@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import os
 import sys
-import tkinter
+import tkinter as tk
 import tkinter.font as font
+from tkinter import ttk
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,6 +29,23 @@ PLOT_DPI = 100
 
 GEAR_ORDER = ["Gs1", "Gp1", "Gr1", "Gs2", "Gp2", "Gr2"]
 RING_GEARS = {"Gr1", "Gr2"}
+
+# --- Modern flat colour palette --------------------------------------------
+BG = "#f0f2f5"           # window background (cool light gray)
+CARD = "#ffffff"         # card / panel background
+FG = "#1f2937"           # primary text (slate-800)
+MUTED = "#6b7280"        # secondary text (slate-500)
+ACCENT = "#2563eb"       # primary accent (blue-600)
+ACCENT_DARK = "#1d4ed8"  # accent hover / pressed
+DANGER = "#dc2626"       # destructive action (red-600)
+DANGER_DARK = "#b91c1c"
+NEUTRAL = "#e5e7eb"      # default button face
+NEUTRAL_DARK = "#d1d5db"
+BORDER = "#d1d5db"       # entry / panel borders
+
+PAD = 6
+PADX = 5
+PADY = 2
 
 # Default values inserted into the input entries at startup.
 DEFAULT_INPUTS = {
@@ -47,29 +65,52 @@ DEFAULT_INPUTS = {
     "PlotOption": 3,
 }
 
-# (key, row, label, hint, hint-on-next-row-spanning-3-cols?)
-DIRECT_INPUTS = [
-    ("TYPE", 1, "Type, TYPE = ",
-     "0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2), 4=Wolfrom(diff=3), 5=Wolfrom(diff=4)",
-     True),
-    ("m", 3, "Module, m = ", "[mm] > 0", False),
-    ("Np", 4, "Planets Number, Np = ", "[ea] > 2", False),
-    ("Zr2overNp", 5, "Zr2/Np = ", "...", False),
-    ("Zs1overNp", 6, "Zs1/Np = ", "...", False),
-    ("Gs1X", 8, "Shift Factor, Gs1.X = ", "...", False),
-    ("Gs2X", 9, "Shift Factor, Gs2.X = ", "...", False),
-    ("B", 10, "Backlash Factor, B = ", "...", False),
-    ("A", 11, "Addendum Factor, A = ", "...", False),
-    ("D", 12, "Dedendum Factor, D = ", "...", False),
-    ("alpha", 13, "Pressure Angle, alpha = ", "[deg]", False),
-    ("C", 14, "Radius of Hob End, C = ", "[mm]", False),
-    ("E", 15, "Radius of Tooth End, E = ", "[mm]", False),
+# (key, label, hint, hint-on-next-row?)
+PLANETARY_INPUTS = [
+    ("TYPE", "Type", "", False),
+    ("m", "Module, m", "[mm] > 0", False),
+    ("Np", "Planets number, Np", "[ea] > 2", False),
+    ("Zr2overNp", "Zr2 / Np", "", False),
+    ("Zs1overNp", "Zs1 / Np", "", False),
 ]
 
+GEAR_INPUTS = [
+    ("Gs1X", "Shift factor, Gs1.X", "", False),
+    ("Gs2X", "Shift factor, Gs2.X", "", False),
+    ("B", "Backlash factor, B", "", False),
+    ("A", "Addendum factor, A", "", False),
+    ("D", "Dedendum factor, D", "", False),
+    ("alpha", "Pressure angle, α", "[deg]", False),
+    ("C", "Hob end radius, C", "[mm]", False),
+    ("E", "Tooth end radius, E", "[mm]", False),
+]
+
+PLOT_ITEMS = [
+    ("Stage1", 1),
+    ("Stage2", 2),
+    ("Total", 3),
+]
+PLOT_OPTIONS = [label for label, _ in PLOT_ITEMS]
+PLOT_LABEL_TO_CODE = {label: code for label, code in PLOT_ITEMS}
+PLOT_CODE_TO_LABEL = {code: label for label, code in PLOT_ITEMS}
+
+# Human-readable Type options paired with their integer gear-type codes.
+TYPE_ITEMS = [
+    ("Simple", 0),
+    ("Wolfrom (diff=0.5)", 2),
+    ("Wolfrom (diff=1)", 1),
+    ("Wolfrom (diff=2)", 3),
+    ("Wolfrom (diff=3)", 4),
+    ("Wolfrom (diff=4)", 5),
+]
+TYPE_LABELS = [label for label, _ in TYPE_ITEMS]
+TYPE_LABEL_TO_CODE = {label: code for label, code in TYPE_ITEMS}
+TYPE_CODE_TO_LABEL = {code: label for label, code in TYPE_ITEMS}
+
 # Shared mutable state populated by the GUI build below.
-app: tkinter.Tk
-entries: dict[str, tkinter.Entry] = {}
-textbox: tkinter.Text
+app: tk.Tk
+entries: dict[str, tk.Widget] = {}
+textbox: tk.Text
 P1: PGS
 gears: dict[str, GPG]
 
@@ -89,7 +130,7 @@ def copy_gear_factors(target_gears, module, b, a, d, angle, c, e):
 
 def read_parameters() -> None:
     """Pull values from the input entries into the model objects."""
-    P1.gear_type = int(entries["TYPE"].get())
+    P1.gear_type = TYPE_LABEL_TO_CODE[entries["TYPE"].get()]
     P1.module = float(entries["m"].get())
     P1.num_planets = int(entries["Np"].get())
     P1.zr2_multiple_np = int(entries["Zr2overNp"].get())
@@ -185,7 +226,7 @@ def plot_pgs() -> None:
     """Render the planetary gear set figure and save the PNG."""
     plt.figure("PGS", figsize=(6, 6))
     plt.clf()
-    option = int(entries["PlotOption"].get())
+    option = PLOT_LABEL_TO_CODE[entries["PlotOption"].get()]
 
     if option in (1, 3):
         _plot_stage(gears["Gs1"], gears["Gp1"], gears["Gr1"],
@@ -385,69 +426,198 @@ def button_exit_callback() -> None:
 
 # --------------------------------------------------------------------- GUI
 def init_parameters() -> None:
+    """Populate every input widget with its default value."""
     for key, default in DEFAULT_INPUTS.items():
-        entries[key].insert(0, str(default))
+        w = entries[key]
+        if key == "TYPE":
+            w.set(TYPE_CODE_TO_LABEL[default])
+        elif key == "PlotOption":
+            w.set(PLOT_CODE_TO_LABEL[default])
+        elif hasattr(w, "set"):        # ttk.Combobox
+            w.set(str(default))
+        else:                          # ttk.Entry
+            w.insert(0, str(default))
 
 
-def _add_section_label(row: int, text: str) -> None:
-    tkinter.Label(app, text=text, font=font16).grid(
-        row=row, column=0, padx=PADX, pady=PADY, sticky="w")
+def _configure_style(style: ttk.Style, title_font, section_font) -> None:
+    """Apply a flat, modern colour palette on top of the clam theme."""
+    style.configure("App.TFrame", background=BG)
+    style.configure("Card.TFrame", background=CARD)
+
+    style.configure("TLabel", background=BG, foreground=FG)
+    style.configure("Card.TLabel", background=BG, foreground=FG)
+    style.configure("CardMuted.TLabel", background=BG, foreground=MUTED)
+    style.configure("Muted.TLabel", background=BG, foreground=MUTED)
+    style.configure("Title.TLabel", background=BG, foreground=ACCENT,
+                    font=title_font)
+    style.configure("Section.TLabel", background=BG, foreground=ACCENT,
+                    font=section_font)
+
+    style.configure("TLabelframe", background=BG, bordercolor=BORDER,
+                    relief="solid", borderwidth=1)
+    style.configure("TLabelframe.Label", background=BG, foreground=ACCENT,
+                    font=section_font)
+
+    style.configure("TEntry", fieldbackground="white", foreground=FG,
+                    bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER,
+                    borderwidth=1, padding=2)
+    style.map("TEntry", bordercolor=[("focus", ACCENT)],
+              lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
+
+    style.configure("TCombobox", fieldbackground="white", foreground=FG,
+                    bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER,
+                    borderwidth=1, padding=2, arrowcolor=ACCENT)
+    style.map("TCombobox",
+              fieldbackground=[("readonly", "white")],
+              foreground=[("readonly", FG)],
+              bordercolor=[("focus", ACCENT)],
+              lightcolor=[("focus", ACCENT)],
+              darkcolor=[("focus", ACCENT)])
+
+    style.configure("TButton", background=NEUTRAL, foreground=FG, borderwidth=0,
+                    focusthickness=0, padding=(10, 4))
+    style.map("TButton",
+              background=[("active", NEUTRAL_DARK), ("pressed", NEUTRAL_DARK)])
+
+    style.configure("Accent.TButton", background=ACCENT, foreground="white",
+                    borderwidth=0, focusthickness=0, padding=(14, 4))
+    style.map("Accent.TButton",
+              background=[("active", ACCENT_DARK), ("pressed", ACCENT_DARK)])
+
+    style.configure("Danger.TButton", background=DANGER, foreground="white",
+                    borderwidth=0, focusthickness=0, padding=(10, 4))
+    style.map("Danger.TButton",
+              background=[("active", DANGER_DARK), ("pressed", DANGER_DARK)])
+
+    style.configure("TScrollbar", background=CARD, troughcolor=BG,
+                    bordercolor=BG, arrowcolor=MUTED, relief="flat")
 
 
-def _add_input(key, row, label_text, hint_text, hint_below=False) -> None:
-    tkinter.Label(app, text=label_text).grid(
-        row=row, column=0, padx=PADX, pady=PADY, sticky="e")
-    entry = tkinter.Entry(app)
-    entry.grid(row=row, column=1, padx=PADX, pady=PADY)
-    if hint_below:
-        tkinter.Label(app, text=hint_text).grid(
-            row=row + 1, column=1, padx=PADX, pady=PADY, sticky="w", columnspan=3)
+def _build_field(parent, row, key, label_text, hint_text, hint_below) -> int:
+    """Add one labelled input row inside ``parent``; return next free row."""
+    ttk.Label(parent, text=label_text, style="Card.TLabel").grid(
+        row=row, column=0, padx=(0, PADX), pady=PADY, sticky="e")
+    if key == "TYPE":
+        entry = ttk.Combobox(parent, values=TYPE_LABELS,
+                             width=20, state="readonly")
     else:
-        tkinter.Label(app, text=hint_text).grid(
-            row=row, column=2, padx=PADX, pady=PADY, sticky="w")
+        entry = ttk.Entry(parent)
+    entry.grid(row=row, column=1, padx=PADX, pady=PADY, sticky="ew")
     entries[key] = entry
+    if hint_text:
+        if hint_below:
+            ttk.Label(parent, text=hint_text, style="CardMuted.TLabel").grid(
+                row=row + 1, column=0, columnspan=2, padx=PADX,
+                pady=(0, PADY), sticky="w")
+            return row + 2
+        ttk.Label(parent, text=hint_text, style="CardMuted.TLabel").grid(
+            row=row, column=2, padx=PADX, pady=PADY, sticky="w")
+    return row + 1
+
+
+def _build_section(parent, title, fields) -> None:
+    """Build a labelled card containing the given input fields."""
+    lf = ttk.LabelFrame(parent, text=title, padding=PAD)
+    lf.grid(sticky="ew", pady=(0, PAD))
+    lf.columnconfigure(1, weight=1)
+    row = 0
+    for key, label_text, hint_text, hint_below in fields:
+        row = _build_field(lf, row, key, label_text, hint_text, hint_below)
+
+
+def _build_result_panel(parent) -> None:
+    """Build the flat report text widget with a scrollbar."""
+    global textbox
+    lf = ttk.LabelFrame(parent, text="Result", padding=PAD)
+    lf.grid(sticky="nsew")
+    lf.rowconfigure(0, weight=1)
+    lf.columnconfigure(0, weight=1)
+
+    textbox = tk.Text(lf, width=72, height=26, relief="flat",
+                      background=CARD, foreground=FG, insertbackground=ACCENT,
+                      borderwidth=0, highlightthickness=1,
+                      highlightbackground=BORDER, highlightcolor=ACCENT,
+                      padx=6, pady=4, wrap="none",
+                      font=("Consolas", 10))
+    textbox.grid(row=0, column=0, sticky="nsew")
+    sb = ttk.Scrollbar(lf, orient="vertical", command=textbox.yview)
+    sb.grid(row=0, column=1, sticky="ns")
+    textbox.configure(yscrollcommand=sb.set)
+
+    textbox.delete("0.0", "end")
+    textbox.insert("end", "\n ########################################")
+    textbox.insert("end", "\n #")
+    textbox.insert("end", "\n # PGS - Planetary Gear Sizing Program")
+    textbox.insert("end", "\n # https://github.com/dymaxionkim/PGS")
+    textbox.insert("end", "\n #")
+    textbox.insert("end", "\n ########################################")
+    textbox.insert("end", "\n\n 1. Input Parameters.")
+    textbox.insert("end", "\n 2. Press Run.")
 
 
 def build_gui() -> None:
-    global app, textbox, font16, PADX, PADY
-    app = tkinter.Tk()
-    app.title("PGS with tkinter")
-    app.resizable(width=True, height=True)
-    font16 = font.Font(size=12)
+    """Create the themed application window and lay out the widgets."""
+    global app
+    app = tk.Tk()
+    app.title("PGS — Planetary Gear Sizing")
+    app.configure(background=BG)
+    app.resizable(True, True)
+    app.minsize(880, 480)
     if sys.platform.startswith("win"):
         app.iconbitmap("PGS.ico")
-    PADX, PADY = 1, 1
 
-    _add_section_label(0, "# Planetary System")
-    for key, row, label_text, hint_text, hint_below in DIRECT_INPUTS:
-        _add_input(key, row, label_text, hint_text, hint_below)
+    base = font.nametofont("TkDefaultFont")
+    base.configure(family="Segoe UI", size=10)
+    title_font = font.Font(family="Segoe UI", size=13, weight="bold")
+    section_font = font.Font(family="Segoe UI", size=10, weight="bold")
 
-    _add_section_label(7, "# Involute Gear Spec")
+    style = ttk.Style(app)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+    _configure_style(style, title_font, section_font)
 
-    plot_label = tkinter.Label(app, text="Plot Options = ", font=font16)
-    plot_label.grid(row=16, column=0, padx=PADX, pady=PADY, sticky="e")
-    plot_entry = tkinter.Entry(app)
-    plot_entry.grid(row=16, column=1, padx=PADX, pady=PADY)
-    entries["PlotOption"] = plot_entry
-    tkinter.Label(app, text="1=Stage1, 2=Stage2, 3=Total").grid(
-        row=17, column=1, padx=PADX, pady=PADY, sticky="w")
+    main = ttk.Frame(app, padding=PAD, style="App.TFrame")
+    main.grid(row=0, column=0, sticky="nsew")
+    app.columnconfigure(0, weight=1)
+    app.rowconfigure(0, weight=1)
+    main.columnconfigure(1, weight=1)
+    main.rowconfigure(0, weight=1)
 
-    tkinter.Button(app, text="Run", command=button_run_callback, width=10).grid(
-        row=20, column=0, padx=PADX, pady=PADY, sticky="e")
-    tkinter.Button(app, text="Exit", command=button_exit_callback, width=10).grid(
-        row=20, column=5, padx=PADX, pady=PADY, sticky="e")
+    # --- left column : inputs --------------------------------------------
+    left = ttk.Frame(main, style="App.TFrame")
+    left.grid(row=0, column=0, sticky="n", padx=(0, PAD))
+    ttk.Label(left, text="Planetary Gear Sizing",
+              style="Title.TLabel").grid(row=0, column=0, sticky="w",
+                                         pady=(0, PAD))
+    container = ttk.Frame(left, style="App.TFrame")
+    container.grid(row=1, column=0, sticky="n")
+    _build_section(container, "Planetary System", PLANETARY_INPUTS)
+    _build_section(container, "Involute Gear Spec", GEAR_INPUTS)
+    lf_plot = ttk.LabelFrame(container, text="Plot", padding=PAD)
+    lf_plot.grid(sticky="ew")
+    lf_plot.columnconfigure(1, weight=1)
+    ttk.Label(lf_plot, text="Plot option", style="Card.TLabel").grid(
+        row=0, column=0, padx=(0, PADX), pady=PADY, sticky="e")
+    cb = ttk.Combobox(lf_plot, values=PLOT_OPTIONS, width=12, state="readonly")
+    cb.grid(row=0, column=1, padx=PADX, pady=PADY, sticky="w")
+    entries["PlotOption"] = cb
 
-    textbox = tkinter.Text(master=app, width=70, height=25)
-    textbox.grid(row=3, column=3, sticky="nsew", rowspan=15, columnspan=3)
-    textbox.delete("0.0", "end")
-    textbox.insert("end", "\n########################################")
-    textbox.insert("end", "\n#")
-    textbox.insert("end", "\n# PGS - Planetary Gear Sizing Program")
-    textbox.insert("end", "\n# https://github.com/dymaxionkim/PGS")
-    textbox.insert("end", "\n#")
-    textbox.insert("end", "\n########################################")
-    textbox.insert("end", "\n\n1. Input Parameters.")
-    textbox.insert("end", "\n2. Press Run.")
+    # --- right column : result -------------------------------------------
+    right = ttk.Frame(main, style="App.TFrame")
+    right.grid(row=0, column=1, sticky="nsew")
+    right.rowconfigure(0, weight=1)
+    right.columnconfigure(0, weight=1)
+    _build_result_panel(right)
+
+    # --- bottom bar : actions -------------------------------------------
+    bar = ttk.Frame(main, style="App.TFrame")
+    bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(PAD, 0))
+    ttk.Button(bar, text="Run", style="Accent.TButton",
+               command=button_run_callback).pack(side="right")
+    ttk.Button(bar, text="Exit", style="Danger.TButton",
+               command=button_exit_callback).pack(side="right", padx=(0, PAD))
 
 
 def main() -> None:
