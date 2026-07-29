@@ -1,517 +1,465 @@
-import tkinter
-from tkinter import filedialog
+"""PGS design GUI.
+
+Tkinter front-end that ties the PGS sizing calculator (``PGS``) and the
+involute gear profile generator (``GPG``) together, plots the gear set
+geometry with matplotlib and exports the results as Markdown and CSV.
+
+Run with::
+
+    uv run design.py
+"""
+
+from __future__ import annotations
+
 import os
 import sys
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas
-from GPG import GPG
-from PGS import PGS
+import tkinter
 import tkinter.font as font
 
-################
-# Functions
+import matplotlib.pyplot as plt
+import numpy as np
 
-def init_parameters():
-    entry_TYPE.insert(0,1)
-    entry_m.insert(0,0.5)
-    entry_Np.insert(0,3)
-    entry_Zr2overNp.insert(0,20)
-    entry_Zs1overNp.insert(0,7)
-    entry_Gs1X.insert(0,0.2)
-    entry_Gs2X.insert(0,-0.05)
-    entry_B.insert(0,0.04)
-    entry_A.insert(0,1.0)
-    entry_D.insert(0,1.25)
-    entry_alpha.insert(0,20)
-    entry_C.insert(0,0.2)
-    entry_E.insert(0,0.1)
-    entry_PlotOption.insert(0,3)
+from GPG import GPG
+from PGS import PGS
 
-def read_parameters():
-    P1.TYPE = int(entry_TYPE.get())
-    P1.m = float(entry_m.get())
-    P1.Np = int(entry_Np.get())
-    P1.Zr2_MultipleNp = int(entry_Zr2overNp.get())
-    P1.Zs1_MultipleNp = int(entry_Zs1overNp.get())
-    P1.alpha = float(entry_alpha.get())
-    ## G1
-    Gs1.M = float(entry_m.get())
-    Gp1.M = float(entry_m.get())
-    Gr1.M = float(entry_m.get())
-    Gs1.X = float(entry_Gs1X.get())
-    Gs1.B = float(entry_B.get())
-    Gp1.B = float(entry_B.get())
-    Gr1.B = float(entry_B.get())
-    Gs1.A = float(entry_A.get())
-    Gp1.A = float(entry_A.get())
-    Gr1.A = float(entry_A.get())
-    Gs1.D = float(entry_D.get())
-    Gp1.D = float(entry_D.get())
-    Gr1.D = float(entry_D.get())
-    Gs1.ALPHA = float(entry_alpha.get())
-    Gp1.ALPHA = float(entry_alpha.get())
-    Gr1.ALPHA = float(entry_alpha.get())
-    Gs1.C = float(entry_C.get())
-    Gp1.C = float(entry_C.get())
-    Gr1.C = float(entry_C.get())
-    Gs1.E = float(entry_E.get())
-    Gp1.E = float(entry_E.get())
-    Gr1.E = float(entry_E.get())
-    ## G2
-    if P1.TYPE!=0:
-        Gs2.M = float(entry_m.get())
-        Gp2.M = float(entry_m.get())
-        Gr2.M = float(entry_m.get())
-        Gs2.X = float(entry_Gs2X.get())
-        Gs2.B = float(entry_B.get())
-        Gp2.B = float(entry_B.get())
-        Gr2.B = float(entry_B.get())
-        Gs2.A = float(entry_A.get())
-        Gp2.A = float(entry_A.get())
-        Gr2.A = float(entry_A.get())
-        Gs2.D = float(entry_D.get())
-        Gp2.D = float(entry_D.get())
-        Gr2.D = float(entry_D.get())
-        Gs2.ALPHA = float(entry_alpha.get())
-        Gp2.ALPHA = float(entry_alpha.get())
-        Gr2.ALPHA = float(entry_alpha.get())
-        Gs2.C = float(entry_C.get())
-        Gp2.C = float(entry_C.get())
-        Gr2.C = float(entry_C.get())
-        Gs2.E = float(entry_E.get())
-        Gp2.E = float(entry_E.get())
-        Gr2.E = float(entry_E.get())
+RESULT_DIR = "./Result"
+DEFAULT_SCALE = 0.7
+PLOT_DPI = 100
 
-def finalize_parameters():
-    ## M, Z
-    Gs1.M = P1.m1
-    Gs1.Z = P1.Zs1
-    Gp1.M = P1.m1
-    Gp1.Z = P1.Zp1
-    Gp1.Y_0 = P1.Dc/2.0
-    Gr1.M = P1.m1
-    Gr1.Z = P1.Zr1
-    if P1.TYPE!=0:
-        Gs2.M = P1.m2
-        Gs2.Z = P1.Zs2
-        Gp2.M = P1.m2
-        Gp2.Z = P1.Zp2
-        Gp2.Y_0 = P1.Dc/2.0
-        Gr2.M = P1.m2
-        Gr2.Z = P1.Zr2
-    ## X
-    Gp1.X = -Gs1.X
-    Gr1.X = Gs1.X
-    if P1.TYPE!=0:
-        Gp2.X = -Gs2.X
-        Gr2.X = Gs2.X
+GEAR_ORDER = ["Gs1", "Gp1", "Gr1", "Gs2", "Gp2", "Gr2"]
+RING_GEARS = {"Gr1", "Gr2"}
 
-def calcGPG():
-    ## PGS Calc
-    P1.Calc()
-    P1.Output()
-    P1.Checks()
+# Default values inserted into the input entries at startup.
+DEFAULT_INPUTS = {
+    "TYPE": 1,
+    "m": 0.5,
+    "Np": 3,
+    "Zr2overNp": 20,
+    "Zs1overNp": 7,
+    "Gs1X": 0.2,
+    "Gs2X": -0.05,
+    "B": 0.04,
+    "A": 1.0,
+    "D": 1.25,
+    "alpha": 20,
+    "C": 0.2,
+    "E": 0.1,
+    "PlotOption": 3,
+}
+
+# (key, row, label, hint, hint-on-next-row-spanning-3-cols?)
+DIRECT_INPUTS = [
+    ("TYPE", 1, "Type, TYPE = ",
+     "0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2), 4=Wolfrom(diff=3), 5=Wolfrom(diff=4)",
+     True),
+    ("m", 3, "Module, m = ", "[mm] > 0", False),
+    ("Np", 4, "Planets Number, Np = ", "[ea] > 2", False),
+    ("Zr2overNp", 5, "Zr2/Np = ", "...", False),
+    ("Zs1overNp", 6, "Zs1/Np = ", "...", False),
+    ("Gs1X", 8, "Shift Factor, Gs1.X = ", "...", False),
+    ("Gs2X", 9, "Shift Factor, Gs2.X = ", "...", False),
+    ("B", 10, "Backlash Factor, B = ", "...", False),
+    ("A", 11, "Addendum Factor, A = ", "...", False),
+    ("D", 12, "Dedendum Factor, D = ", "...", False),
+    ("alpha", 13, "Pressure Angle, alpha = ", "[deg]", False),
+    ("C", 14, "Radius of Hob End, C = ", "[mm]", False),
+    ("E", 15, "Radius of Tooth End, E = ", "[mm]", False),
+]
+
+# Shared mutable state populated by the GUI build below.
+app: tkinter.Tk
+entries: dict[str, tkinter.Entry] = {}
+textbox: tkinter.Text
+P1: PGS
+gears: dict[str, GPG]
+
+
+# ---------------------------------------------------------------- parameters
+def copy_gear_factors(target_gears, module, b, a, d, angle, c, e):
+    """Apply the shared factor inputs to every gear in ``target_gears``."""
+    for gear in target_gears:
+        gear.module = module
+        gear.backlash_factor = b
+        gear.addendum_factor = a
+        gear.dedendum_factor = d
+        gear.pressure_angle = angle
+        gear.hob_tip_radius_factor = c
+        gear.tooth_tip_radius_factor = e
+
+
+def read_parameters() -> None:
+    """Pull values from the input entries into the model objects."""
+    P1.gear_type = int(entries["TYPE"].get())
+    P1.module = float(entries["m"].get())
+    P1.num_planets = int(entries["Np"].get())
+    P1.zr2_multiple_np = int(entries["Zr2overNp"].get())
+    P1.zs1_multiple_np = int(entries["Zs1overNp"].get())
+    P1.pressure_angle = float(entries["alpha"].get())
+
+    module = float(entries["m"].get())
+    b = float(entries["B"].get())
+    a = float(entries["A"].get())
+    d = float(entries["D"].get())
+    angle = float(entries["alpha"].get())
+    c = float(entries["C"].get())
+    e = float(entries["E"].get())
+
+    copy_gear_factors((gears["Gs1"], gears["Gp1"], gears["Gr1"]),
+                      module, b, a, d, angle, c, e)
+    gears["Gs1"].shift_factor = float(entries["Gs1X"].get())
+
+    if P1.is_wolfrom:
+        copy_gear_factors((gears["Gs2"], gears["Gp2"], gears["Gr2"]),
+                          module, b, a, d, angle, c, e)
+        gears["Gs2"].shift_factor = float(entries["Gs2X"].get())
+
+
+def finalize_parameters() -> None:
+    """Transfer the PGS-derived tooth counts/modules to the GPG gears."""
+    gears["Gs1"].module = P1.module1
+    gears["Gs1"].teeth = P1.zs1
+    gears["Gp1"].module = P1.module1
+    gears["Gp1"].teeth = P1.zp1
+    gears["Gp1"].y0 = P1.dc / 2.0
+    gears["Gr1"].module = P1.module1
+    gears["Gr1"].teeth = P1.zr1
+
+    if P1.is_wolfrom:
+        gears["Gs2"].module = P1.module2
+        gears["Gs2"].teeth = P1.zs2
+        gears["Gp2"].module = P1.module2
+        gears["Gp2"].teeth = P1.zp2
+        gears["Gp2"].y0 = P1.dc / 2.0
+        gears["Gr2"].module = P1.module2
+        gears["Gr2"].teeth = P1.zr2
+
+    gears["Gp1"].shift_factor = -gears["Gs1"].shift_factor
+    gears["Gr1"].shift_factor = gears["Gs1"].shift_factor
+    if P1.is_wolfrom:
+        gears["Gp2"].shift_factor = -gears["Gs2"].shift_factor
+        gears["Gr2"].shift_factor = gears["Gs2"].shift_factor
+
+
+def run_calc() -> None:
+    """Run PGS sizing and every gear's profile generation."""
+    P1.calc()
+    P1.output()
+    P1.checks_run()
     finalize_parameters()
-    ## Gear Calc
-    Gs1.Calc()
-    Gp1.Calc()
-    Gr1.Calc()
-    if P1.TYPE!=0:
-        Gs2.Calc()
-        Gp2.Calc()
-        Gr2.Calc()
+    for name in GEAR_ORDER[:3]:
+        gears[name].calc()
+    if P1.is_wolfrom:
+        for name in GEAR_ORDER[3:]:
+            gears[name].calc()
 
-def Rotate(Xin,Yin,Angle):
-    Xout = np.cos(Angle)*Xin - np.sin(Angle)*Yin
-    Yout = np.sin(Angle)*Xin + np.cos(Angle)*Yin
-    return Xout,Yout
 
-def PlotPGS():
-    plt.figure("PGS",figsize=(6,6))
-    plt.clf() # Clear figure
-    if int(entry_PlotOption.get())==1 or int(entry_PlotOption.get())==3:
-        # Plot Gs1
-        Sun_Angle = 0.0
-        if Gp1.Z%2==0:
-            Sun_Angle = (2*np.pi/Gs1.Z)/2
-        Gs1_X, Gs1_Y = Rotate(Gs1.X8,Gs1.Y8,Sun_Angle)
-        plt.plot(Gs1_X,Gs1_Y,'dimgray')
-        plt.plot(Gs1.Xp,Gs1.Yp,'r:')
-        # Plot Gp1
-        Gp1_Array_Angle = 2*np.pi/P1.Np
-        for i in range(0,P1.Np):
-            Gp1_Array_X, Gp1_Array_Y = Rotate(Gp1.X8,Gp1.Y8,Gp1_Array_Angle*i)
-            Gp1_Array_Xp, Gp1_Array_Yp = Rotate(Gp1.Xp,Gp1.Yp,Gp1_Array_Angle*i)
-            plt.plot(Gp1_Array_X,Gp1_Array_Y,'dimgray')
-            plt.plot(Gp1_Array_Xp,Gp1_Array_Yp,'r:')
-        # Plot Gr1
-        plt.plot(Gr1.X8,Gr1.Y8,'dimgray')
-        plt.plot(Gr1.Xp,Gr1.Yp,'r:')
-    if int(entry_PlotOption.get())==2 or int(entry_PlotOption.get())==3:
-        # Plot Gs2
-        if P1.TYPE!=0:
-            Sun_Angle = 0.0
-            if Gp2.Z%2==0:
-                Sun_Angle = (2*np.pi/Gs2.Z)/2
-            Gs2_X, Gs2_Y = Rotate(Gs2.X8,Gs2.Y8,Sun_Angle)
-            plt.plot(Gs2_X,Gs2_Y,'black')
-            plt.plot(Gs2.Xp,Gs2.Yp,'r--')
-        # Plot Gp2
-        if P1.TYPE!=0:
-            Gp2_Array_Angle = 2*np.pi/P1.Np
-            for i in range(0,P1.Np):
-                Gp2_Array_X, Gp2_Array_Y = Rotate(Gp2.X8,Gp2.Y8,Gp2_Array_Angle*i)
-                Gp2_Array_Xp, Gp2_Array_Yp = Rotate(Gp2.Xp,Gp2.Yp,Gp2_Array_Angle*i)
-                plt.plot(Gp2_Array_X,Gp2_Array_Y,'black')
-                plt.plot(Gp2_Array_Xp,Gp2_Array_Yp,'r--')
-        # Plot Gr2
-        if P1.TYPE!=0:
-            plt.plot(Gr2.X8,Gr2.Y8,'black')
-            plt.plot(Gr2.Xp,Gr2.Yp,'r--')
-    # Plot show
+# --------------------------------------------------------------- helpers
+def rotate(x, y, angle):
+    """Rotate the point arrays ``(x, y)`` by ``angle`` radians."""
+    ca, sa = np.cos(angle), np.sin(angle)
+    return ca * x - sa * y, sa * x + ca * y
+
+
+# --------------------------------------------------------------- plotting
+def _plot_stage(sun, planet, ring, *, color, pitch_style) -> None:
+    """Draw the sun, its array of planets and the ring for one stage."""
+    sun_angle = 0.0
+    if planet.teeth % 2 == 0:
+        sun_angle = (2 * np.pi / sun.teeth) / 2
+    sx, sy = rotate(sun.plot_x, sun.plot_y, sun_angle)
+    plt.plot(sx, sy, color)
+    plt.plot(sun.pitch_circle_x, sun.pitch_circle_y, pitch_style)
+
+    array_angle = 2 * np.pi / P1.num_planets
+    for i in range(P1.num_planets):
+        px, py = rotate(planet.plot_x, planet.plot_y, array_angle * i)
+        ppx, ppy = rotate(planet.pitch_circle_x, planet.pitch_circle_y, array_angle * i)
+        plt.plot(px, py, color)
+        plt.plot(ppx, ppy, pitch_style)
+
+    plt.plot(ring.plot_x, ring.plot_y, color)
+    plt.plot(ring.pitch_circle_x, ring.pitch_circle_y, pitch_style)
+
+
+def plot_pgs() -> None:
+    """Render the planetary gear set figure and save the PNG."""
+    plt.figure("PGS", figsize=(6, 6))
+    plt.clf()
+    option = int(entries["PlotOption"].get())
+
+    if option in (1, 3):
+        _plot_stage(gears["Gs1"], gears["Gp1"], gears["Gr1"],
+                    color="dimgray", pitch_style="r:")
+    if option in (2, 3) and P1.is_wolfrom:
+        _plot_stage(gears["Gs2"], gears["Gp2"], gears["Gr2"],
+                    color="black", pitch_style="r--")
+
     plt.axis("equal")
     plt.grid(True)
-    if int(entry_PlotOption.get())==1:
-        plt.savefig('./Result/PGS1.png',dpi=100)
-    elif int(entry_PlotOption.get())==2:
-        plt.savefig('./Result/PGS2.png',dpi=100)
-    else:
-        plt.savefig('./Result/PGS.png',dpi=100)
+    out_name = {1: "/PGS1.png", 2: "/PGS2.png", 3: "/PGS.png"}[option]
+    plt.savefig(RESULT_DIR + out_name, dpi=PLOT_DPI)
     plt.show()
 
-def OutputText():
-    ## Head
-    textbox.delete("0.0", "end")
-    textbox.insert("0.0", "# PGS - Planetary Gear Sizing Program\n\n")
-    textbox.insert("end", "![](./PGS.png)\n\n")
-    ### Check Geometrical Conditions 
-    textbox.insert("end","## Check Geometrical Conditions\n")
-    textbox.insert("end","* Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : "+P1.NonFactorizing1+"\n")
-    if P1.TYPE!=0:
-        textbox.insert("end","* Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : "+P1.NonFactorizing2+"\n")
-    textbox.insert("end","* Planet Numbers (Equal Distance Condition) 1 : "+P1.EqualDistance1+"\n")
-    if P1.TYPE!=0:
-        textbox.insert("end","* Planet Numbers (Equal Distance Condition) 2 : "+P1.EqualDistance2+"\n")
-    textbox.insert("end","* Planets Interference (Non-Overlap Condition) 1 : "+P1.PlanetsInterference1+"\n")
-    if P1.TYPE!=0:
-        textbox.insert("end","* Planets Interference (Non-Overlap Condition) 2 : "+P1.PlanetsInterference2+"\n")
-    textbox.insert("end","* Involute Interference Condition 1 : "+P1.InvoluteInterference1+"\n")
-    if P1.TYPE!=0:
-        textbox.insert("end","* Involute Interference Condition 2 : "+P1.InvoluteInterference2+"\n")
-    textbox.insert("end","* Trimming Interference 1 : "+P1.TrimmingInterference1+"\n")
-    if P1.TYPE!=0:
-        textbox.insert("end","* Trimming Interference 2 : "+P1.TrimmingInterference2+"\n")
-    textbox.insert("end","* Teeth Numbers which is Integer 1 : "+P1.TeethNumberInteger1+"\n")
-    if P1.TYPE!=0:
-        textbox.insert("end","* Teeth Numbers which is Integer 2 : "+P1.TeethNumberInteger2+"\n")
-    textbox.insert("end","\n")
-    ### Input Parameters
-    textbox.insert("end","## Input Parameters\n")
-    textbox.insert("end","* Type, TYPE = "+str(int(P1.TYPE))+"\n")
-    textbox.insert("end","* Module, m = "+str(float(P1.m))+"\n")
-    textbox.insert("end","* Planets Number, Np = "+str(int(P1.Np))+"\n")
-    textbox.insert("end","* Zr2/Np = "+str(int(P1.Zr2_MultipleNp))+"\n")
-    textbox.insert("end","* Zs1/Np = "+str(int(P1.Zs1_MultipleNp))+"\n")
-    textbox.insert("end","* Shift Factor, Gs1.X = "+str(float(Gs1.X))+"\n")
-    textbox.insert("end","* Shift Factor, Gs2.X = "+str(float(Gs2.X))+"\n")
-    textbox.insert("end","* Backlash Factor, B = "+str(float(Gs1.B))+"\n")
-    textbox.insert("end","* Addendum Factor, A = "+str(float(Gs1.A))+"\n")
-    textbox.insert("end","* Dedendum Factor, D = "+str(float(Gs1.D))+"\n")
-    textbox.insert("end","* Pressure Angle, alpha = "+str(float(Gs1.ALPHA))+"\n")
-    textbox.insert("end","* Radius of Hib End, C = "+str(float(Gs1.C))+"\n")
-    textbox.insert("end","* Radius of Tooth End, E = "+str(float(Gs1.E))+"\n\n")
-    ### P1
-    if P1.TYPE!=0:
-        textbox.insert("end","## Wolfrom Planetary Gear Set"+"\n\n")
-        textbox.insert("end","### Ratio"+"\n")
-        textbox.insert("end","* Ratio (Sun-Planet1) = "+str(P1.Gp1s)+"\n")
-        textbox.insert("end","* Ratio (Planet2-Ring2) = "+str(P1.Gr2p2)+"\n")
-        textbox.insert("end","* Ratio Total (Ring2 Fiexed, Carrier Output) = "+str(P1.G1)+"\n")
-        textbox.insert("end","* Ratio Total (Carrier Fixed, Ring2 Output) = "+str(P1.G2)+"\n")
-        temp1 = int(Gr2.Z*Gp1.Z*Gs1.Z+Gr2.Z*Gp1.Z*Gr1.Z)
-        temp2 = int(Gs1.Z*Gr2.Z*Gp1.Z-Gs1.Z*Gr1.Z*Gp2.Z)
-        temp3 = np.gcd(temp1,temp2)
-        textbox.insert("end","* Ratio Total (Type-3K : Carrier Free, Ring2 Output) = "+str(P1.G22)+" = "+str(int(temp1/temp3))+"/"+str(int(temp2/temp3))+"\n\n")
-        textbox.insert("end","### Size"+"\n")
-        textbox.insert("end","* Sun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]"+"\n")
-        textbox.insert("end","* Planet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]"+"\n")
-        textbox.insert("end","* Ring1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]"+"\n")
-        textbox.insert("end","* Sun2 = "+str(P1.Ds2)+" [mm],  "+str(P1.Zs2)+" [ea]"+"\n")
-        textbox.insert("end","* Planet2 = "+str(P1.Dp2)+" [mm],  "+str(P1.Zp2)+" [ea]"+"\n")
-        textbox.insert("end","* Ring2 = "+str(P1.Dr2)+" [mm],  "+str(P1.Zr2)+" [ea]"+"\n")
-        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n")
-        textbox.insert("end","* Number of Planets = "+str(P1.Np)+" [ea]"+"\n\n")
+
+# ----------------------------------------------------------- report builder
+def _append_checks(lines: list[str]) -> None:
+    c = P1.checks
+    lines.append("## Check Geometrical Conditions\n")
+    lines.append("* Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : " + c.non_factorizing_1 + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : " + c.non_factorizing_2 + "\n")
+    lines.append("* Planet Numbers (Equal Distance Condition) 1 : " + c.equal_distance_1 + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Planet Numbers (Equal Distance Condition) 2 : " + c.equal_distance_2 + "\n")
+    lines.append("* Planets Interference (Non-Overlap Condition) 1 : " + c.planets_interference_1 + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Planets Interference (Non-Overlap Condition) 2 : " + c.planets_interference_2 + "\n")
+    lines.append("* Involute Interference Condition 1 : " + c.involute_interference_1 + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Involute Interference Condition 2 : " + c.involute_interference_2 + "\n")
+    lines.append("* Trimming Interference 1 : " + c.trimming_interference_1 + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Trimming Interference 2 : " + c.trimming_interference_2 + "\n")
+    lines.append("* Teeth Numbers which is Integer 1 : " + c.teeth_number_integer_1 + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Teeth Numbers which is Integer 2 : " + c.teeth_number_integer_2 + "\n")
+    lines.append("\n")
+
+
+def _append_inputs(lines: list[str]) -> None:
+    lines.append("## Input Parameters\n")
+    lines.append("* Type, TYPE = " + str(int(P1.gear_type)) + "\n")
+    lines.append("* Module, m = " + str(float(P1.module)) + "\n")
+    lines.append("* Planets Number, Np = " + str(int(P1.num_planets)) + "\n")
+    lines.append("* Zr2/Np = " + str(int(P1.zr2_multiple_np)) + "\n")
+    lines.append("* Zs1/Np = " + str(int(P1.zs1_multiple_np)) + "\n")
+    lines.append("* Shift Factor, Gs1.X = " + str(float(gears["Gs1"].shift_factor)) + "\n")
+    lines.append("* Shift Factor, Gs2.X = " + str(float(gears["Gs2"].shift_factor)) + "\n")
+    lines.append("* Backlash Factor, B = " + str(float(gears["Gs1"].backlash_factor)) + "\n")
+    lines.append("* Addendum Factor, A = " + str(float(gears["Gs1"].addendum_factor)) + "\n")
+    lines.append("* Dedendum Factor, D = " + str(float(gears["Gs1"].dedendum_factor)) + "\n")
+    lines.append("* Pressure Angle, alpha = " + str(float(gears["Gs1"].pressure_angle)) + "\n")
+    lines.append("* Radius of Hib End, C = " + str(float(gears["Gs1"].hob_tip_radius_factor)) + "\n")
+    lines.append("* Radius of Tooth End, E = " + str(float(gears["Gs1"].tooth_tip_radius_factor)) + "\n\n")
+
+
+def _append_wolfrom(lines: list[str]) -> None:
+    gr2, gp1, gs1, gr1, gp2 = (gears["Gr2"].teeth, gears["Gp1"].teeth,
+                              gears["Gs1"].teeth, gears["Gr1"].teeth,
+                              gears["Gp2"].teeth)
+    num = int(gr2 * gp1 * gs1 + gr2 * gp1 * gr1)
+    den = int(gs1 * gr2 * gp1 - gs1 * gr1 * gp2)
+    common = np.gcd(num, den)
+    fraction = f"{int(num / common)}/{int(den / common)}"
+
+    lines.append("## Wolfrom Planetary Gear Set\n\n")
+    lines.append("### Ratio\n")
+    lines.append("* Ratio (Sun-Planet1) = " + str(P1.gp1s) + "\n")
+    lines.append("* Ratio (Planet2-Ring2) = " + str(P1.gr2p2) + "\n")
+    lines.append("* Ratio Total (Ring2 Fiexed, Carrier Output) = " + str(P1.g1) + "\n")
+    lines.append("* Ratio Total (Carrier Fixed, Ring2 Output) = " + str(P1.g2) + "\n")
+    lines.append("* Ratio Total (Type-3K : Carrier Free, Ring2 Output) = "
+                + str(P1.g22) + " = " + fraction + "\n\n")
+    lines.append("### Size\n")
+    lines.append("* Sun1 = " + str(P1.ds1) + " [mm],  " + str(P1.zs1) + " [ea]\n")
+    lines.append("* Planet1 = " + str(P1.dp1) + " [mm],  " + str(P1.zp1) + " [ea]\n")
+    lines.append("* Ring1 = " + str(P1.dr1) + " [mm],  " + str(P1.zr1) + " [ea]\n")
+    lines.append("* Sun2 = " + str(P1.ds2) + " [mm],  " + str(P1.zs2) + " [ea]\n")
+    lines.append("* Planet2 = " + str(P1.dp2) + " [mm],  " + str(P1.zp2) + " [ea]\n")
+    lines.append("* Ring2 = " + str(P1.dr2) + " [mm],  " + str(P1.zr2) + " [ea]\n")
+    lines.append("* Radius of Carrier = " + str(P1.dc / 2) + " [mm]\n")
+    lines.append("* Number of Planets = " + str(P1.num_planets) + " [ea]\n\n")
+
+
+def _append_simple(lines: list[str]) -> None:
+    lines.append("## Simple Planetary Gear Set\n\n")
+    lines.append("### Ratio\n")
+    lines.append("* Ratio (Sun-Planet1) = " + str(P1.gp1s) + "\n")
+    lines.append("* Ratio (Total, Carrier Output) (1-stage) = " + str(P1.g3) + "\n")
+    lines.append("* Ratio (Total, Carrier Output) (2-stages) = " + str(P1.g3 ** 2) + "\n")
+    lines.append("* Ratio (Total, Carrier Output) (3-stages) = " + str(P1.g3 ** 3) + "\n")
+    lines.append("* Ratio (Total, Ring1 Output) (1-stage) = " + str(P1.g4) + "\n")
+    lines.append("* Ratio (Total, Ring1 Output) (2-stages) = " + str(P1.g4 ** 2) + "\n")
+    lines.append("* Ratio (Total, Ring1 Output) (3-stages) = " + str(P1.g4 ** 3) + "\n\n")
+    lines.append("### Size\n")
+    lines.append("* Sun1 = " + str(P1.ds1) + " [mm],  " + str(P1.zs1) + " [ea]\n")
+    lines.append("* Planet1 = " + str(P1.dp1) + " [mm],  " + str(P1.zp1) + " [ea]\n")
+    lines.append("* Ring1 = " + str(P1.dr1) + " [mm],  " + str(P1.zr1) + " [ea]\n")
+    lines.append("* Radius of Carrier = " + str(P1.dc / 2) + " [mm]\n")
+    lines.append("* Number of Planets = " + str(P1.num_planets) + " [ea]\n\n")
+
+
+def _append_gear_specs(lines: list[str]) -> None:
+    for name in GEAR_ORDER if P1.is_wolfrom else GEAR_ORDER[:3]:
+        gear = gears[name]
+        is_ring = name in RING_GEARS
+        teeth_label = f"-{round(gear.teeth, 6)}" if is_ring else f"{round(gear.teeth, 6)}"
+        lines.append(f"### {name}\n")
+        lines.append(f"* Module = {gear.module} [mm]\n")
+        lines.append(f"* Pressure Angle = {gear.pressure_angle} [deg]\n")
+        lines.append(f"* Teeth Number = {teeth_label} [ea]\n")
+        lines.append(f"* Offset Factor = {gear.shift_factor}\n")
+        lines.append(f"* Offset = {gear.shift_factor * gear.module} [mm]\n")
+        lines.append(f"* Backlash Factor = {gear.backlash_factor}\n")
+        lines.append(f"* Backlash = {gear.backlash_factor * gear.module} [mm]\n")
+        lines.append(f"* Addendum Factor = {gear.addendum_factor}\n")
+        lines.append(f"* Addendum = {gear.addendum_factor * gear.module} [mm]\n")
+        lines.append(f"* Dedendum Factor = {gear.dedendum_factor}\n")
+        lines.append(f"* Dedendum = {gear.dedendum_factor * gear.module} [mm]\n")
+        lines.append(f"* Total Tooth Height = {(gear.addendum_factor + gear.dedendum_factor) * gear.module} [mm]\n")
+        lines.append(f"* Base Circle Dia = {gear.module * gear.teeth * np.cos(np.deg2rad(gear.pressure_angle))} [mm]\n")
+        lines.append(f"* Pitch Circle Dia = {gear.module * gear.teeth} [mm]\n")
+        lines.append(f"* Offset Circle Dia = {2 * gear.module * (gear.teeth / 2 + gear.shift_factor)} [mm]\n")
+        lines.append(f"* Root Circle Dia = {2 * gear.module * (gear.teeth / 2 + gear.shift_factor - gear.dedendum_factor)} [mm]\n")
+        lines.append(f"* Outer Circle Dia = {2 * gear.module * (gear.teeth / 2 + gear.shift_factor + gear.addendum_factor)} [mm]\n\n")
+
+
+def build_report() -> None:
+    """Compose the Markdown report and place it into the textbox."""
+    lines: list[str] = []
+    lines.append("# PGS - Planetary Gear Sizing Program\n\n")
+    lines.append("![](./PGS.png)\n\n")
+    _append_checks(lines)
+    _append_inputs(lines)
+    if P1.is_wolfrom:
+        _append_wolfrom(lines)
     else:
-        textbox.insert("end","## Simple Planetary Gear Set"+"\n\n")
-        textbox.insert("end","### Ratio"+"\n")
-        textbox.insert("end","* Ratio (Sun-Planet1) = "+str(P1.Gp1s)+"\n")
-        textbox.insert("end","* Ratio (Total, Carrier Output) (1-stage) = "+str(P1.G3)+"\n")
-        textbox.insert("end","* Ratio (Total, Carrier Output) (2-stages) = "+str(P1.G3**2)+"\n")
-        textbox.insert("end","* Ratio (Total, Carrier Output) (3-stages) = "+str(P1.G3**3)+"\n")
-        textbox.insert("end","* Ratio (Total, Ring1 Output) (1-stage) = "+str(P1.G4)+"\n")
-        textbox.insert("end","* Ratio (Total, Ring1 Output) (2-stages) = "+str(P1.G4**2)+"\n")
-        textbox.insert("end","* Ratio (Total, Ring1 Output) (3-stages) = "+str(P1.G4**3)+"\n\n")
-        textbox.insert("end","### Size"+"\n")
-        textbox.insert("end","* Sun1 = "+str(P1.Ds1)+" [mm],  "+str(P1.Zs1)+" [ea]"+"\n")
-        textbox.insert("end","* Planet1 = "+str(P1.Dp1)+" [mm],  "+str(P1.Zp1)+" [ea]"+"\n")
-        textbox.insert("end","* Ring1 = "+str(P1.Dr1)+" [mm],  "+str(P1.Zr1)+" [ea]"+"\n")
-        textbox.insert("end","* Radius of Carrier = "+str(P1.Dc/2)+" [mm]"+"\n")
-        textbox.insert("end","* Number of Planets = "+str(P1.Np)+" [ea]"+"\n\n")
-    ### Gs1, Gp1, Gr1, Gs2, Gp2, Gr2
-    temp = ['Gs1', 'Gp1', 'Gr1']
-    if P1.TYPE!=0:
-        temp = ['Gs1', 'Gp1', 'Gr1', 'Gs2', 'Gp2', 'Gr2']
-    for i in temp:
-        textbox.insert("end","### "+str(i)+"\n")
-        textbox.insert("end","* Module = "+str(eval(i).M)+" [mm]"+"\n")
-        textbox.insert("end","* Pressure Angle = "+str(eval(i).ALPHA)+" [deg]"+"\n")
-        if str(i)=='Gr1' or str(i)=='Gr2':
-            textbox.insert("end","* Teeth Number = -"+str(round(eval(i).Z,6))+" [ea]"+"\n")
-        else:
-            textbox.insert("end","* Teeth Number = "+str(round(eval(i).Z,6))+" [ea]"+"\n")
-        textbox.insert("end","* Offset Factor = "+str(eval(i).X)+""+"\n")
-        textbox.insert("end","* Offset = "+str(eval(i).X*eval(i).M)+" [mm]"+"\n")
-        textbox.insert("end","* Backlash Factor = "+str(eval(i).B)+""+"\n")
-        textbox.insert("end","* Backlash = "+str(eval(i).B*eval(i).M)+" [mm]"+"\n")
-        textbox.insert("end","* Addendum Factor = "+str(eval(i).A)+""+"\n")
-        textbox.insert("end","* Addendum = "+str(eval(i).A*eval(i).M)+" [mm]"+"\n")
-        textbox.insert("end","* Dedendum Factor = "+str(eval(i).D)+""+"\n")
-        textbox.insert("end","* Dedendum = "+str(eval(i).D*eval(i).M)+" [mm]"+"\n")
-        textbox.insert("end","* Total Tooth Height = "+str((eval(i).A+eval(i).D)*eval(i).M)+" [mm]"+"\n")
-        textbox.insert("end","* Base Circle Dia = "+str(eval(i).M*eval(i).Z*np.cos(np.deg2rad(eval(i).ALPHA)))+" [mm]"+"\n")
-        textbox.insert("end","* Pitch Circle Dia = "+str(eval(i).M*eval(i).Z)+" [mm]"+"\n")
-        textbox.insert("end","* Offset Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X))+" [mm]"+"\n")
-        textbox.insert("end","* Root Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X-eval(i).D))+" [mm]"+"\n")
-        textbox.insert("end","* Outer Circle Dia = "+str(2*eval(i).M*(eval(i).Z/2+eval(i).X+eval(i).A))+" [mm]"+"\n\n")
+        _append_simple(lines)
+    _append_gear_specs(lines)
+    textbox.delete("0.0", "end")
+    textbox.insert("0.0", "".join(lines))
 
-def save_parameters():
-    WorkingDirectory = "./Result"
-    temp = ['Gs1', 'Gp1', 'Gr1']
-    if P1.TYPE!=0:
-        temp = ['Gs1', 'Gp1', 'Gr1', 'Gs2', 'Gp2', 'Gr2']
-    os.makedirs(WorkingDirectory, exist_ok=True)
-    f1=open(WorkingDirectory+'/PGS.md','w')
-    f1.write(textbox.get('0.0','end'))
-    f1.close()
-    for i in temp:
-        temp2 = WorkingDirectory+"/"+i
-        os.makedirs(temp2, exist_ok=True)
-        f2=open(temp2+'/Inputs.csv','w')
-        f2.write('parameter,value'+'\n')
-        f2.write('m,'+str(eval(i).M)+'\n')
-        if i=='Gr1' or i=='Gr2':
-            f2.write('z,'+str(-round(eval(i).Z,6))+'\n')
-        else:
-            f2.write('z,'+str(round(eval(i).Z,6))+'\n')
-        f2.write('alpha,'+str(eval(i).ALPHA)+'\n')
-        if i=='Gr1' or i=='Gr2':
-            f2.write('x,'+str(-eval(i).X)+'\n')
-        else :
-            f2.write('x,'+str(eval(i).X)+'\n')
-        if i=='Gr1' or i=='Gr2':
-            f2.write('b,'+str(-eval(i).B)+'\n')
-        else :
-            f2.write('b,'+str(eval(i).B)+'\n')
-        if i=='Gr1' or i=='Gr2':
-            f2.write('a,'+str(eval(i).D)+'\n')
-            f2.write('d,'+str(eval(i).A)+'\n')
-        else :
-            f2.write('a,'+str(eval(i).A)+'\n')
-            f2.write('d,'+str(eval(i).D)+'\n')
-        f2.write('c,'+str(eval(i).C)+'\n')
-        f2.write('e,'+str(eval(i).E)+'\n')
-        f2.write('x_0,'+str(eval(i).X_0)+'\n')
-        f2.write('y_0,'+str(eval(i).Y_0)+'\n')
-        f2.write('seg_circle,'+str(eval(i).SEG_CIRCLE)+'\n')
-        f2.write('seg_involute,'+str(eval(i).SEG_INVOLUTE)+'\n')
-        f2.write('seg_edge_r,'+str(eval(i).SEG_EDGE_R)+'\n')
-        f2.write('seg_root_r,'+str(eval(i).SEG_ROOT_R)+'\n')
-        f2.write('seg_outer,'+str(eval(i).SEG_OUTER)+'\n')
-        f2.write('seg_root,'+str(eval(i).SEG_ROOT)+'\n')
-        f2.write('scale,'+'0.7'+'\n')
-        f2.close()
 
-################
-# Callback
-def button_run_callback():
+# --------------------------------------------------------------- file output
+def _gear_csv_rows(name: str, gear: GPG) -> list[tuple[str, object]]:
+    is_ring = name in RING_GEARS
+    return [
+        ("parameter", "value"),
+        ("m", gear.module),
+        ("z", -round(gear.teeth, 6) if is_ring else round(gear.teeth, 6)),
+        ("alpha", gear.pressure_angle),
+        ("x", -gear.shift_factor if is_ring else gear.shift_factor),
+        ("b", -gear.backlash_factor if is_ring else gear.backlash_factor),
+        ("a", gear.dedendum_factor if is_ring else gear.addendum_factor),
+        ("d", gear.addendum_factor if is_ring else gear.dedendum_factor),
+        ("c", gear.hob_tip_radius_factor),
+        ("e", gear.tooth_tip_radius_factor),
+        ("x_0", gear.x0),
+        ("y_0", gear.y0),
+        ("seg_circle", gear.seg_circle),
+        ("seg_involute", gear.seg_involute),
+        ("seg_edge_r", gear.seg_edge_round),
+        ("seg_root_r", gear.seg_root_round),
+        ("seg_outer", gear.seg_outer),
+        ("seg_root", gear.seg_root),
+        ("scale", DEFAULT_SCALE),
+    ]
+
+
+def save_output() -> None:
+    """Write the Markdown report and per-gear CSV inputs to ``RESULT_DIR``."""
+    os.makedirs(RESULT_DIR, exist_ok=True)
+    with open(RESULT_DIR + "/PGS.md", "w") as f:
+        f.write(textbox.get("0.0", "end"))
+    for name in GEAR_ORDER if P1.is_wolfrom else GEAR_ORDER[:3]:
+        folder = RESULT_DIR + "/" + name
+        os.makedirs(folder, exist_ok=True)
+        with open(folder + "/Inputs.csv", "w") as f:
+            for key, value in _gear_csv_rows(name, gears[name]):
+                f.write(f"{key},{value}\n")
+
+
+# ---------------------------------------------------------------- callbacks
+def button_run_callback() -> None:
     read_parameters()
-    calcGPG()
-    OutputText()
-    save_parameters()
-    PlotPGS()
+    run_calc()
+    build_report()
+    save_output()
+    plot_pgs()
 
-def button_exit_callback():
+
+def button_exit_callback() -> None:
     print("button_exit pressed")
     exit()
 
-################
-# GUI Setting
-app = tkinter.Tk()
-app.title("PGS with tkinter")
-#app.geometry("950x600")
-app.resizable(width=True, height=True)
-font16 = font.Font(size=12)
-if ( sys.platform.startswith('win')): app.iconbitmap('PGS.ico')
-## Gap between pads in tkinter
-PADX = 1
-PADY = 1
 
-## Subject
-label_P1 = tkinter.Label(app, text="# Planetary System", font=font16)
-label_P1.grid(row=0, column=0, padx=PADX, pady=PADY, sticky="w")
+# --------------------------------------------------------------------- GUI
+def init_parameters() -> None:
+    for key, default in DEFAULT_INPUTS.items():
+        entries[key].insert(0, str(default))
 
-## Type, TYPE
-label1_TYPE = tkinter.Label(app, text="Type, TYPE = ")
-label1_TYPE.grid(row=1, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_TYPE = tkinter.Entry(app)
-entry_TYPE.grid(row=1, column=1, padx=PADX, pady=PADY)
-label2_TYPE = tkinter.Label(app, text="0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2), 4=Wolfrom(diff=3), 5=Wolfrom(diff=4)")
-label2_TYPE.grid(row=2, column=1, padx=PADX, pady=PADY, sticky="w", columnspan=3)
 
-## Module, m
-label1_m = tkinter.Label(app, text="Module, m = ")
-label1_m.grid(row=3, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_m = tkinter.Entry(app)
-entry_m.grid(row=3, column=1, padx=PADX, pady=PADY)
-label2_m = tkinter.Label(app, text="[mm] > 0")
-label2_m.grid(row=3, column=2, padx=PADX, pady=PADY, sticky="w")
+def _add_section_label(row: int, text: str) -> None:
+    tkinter.Label(app, text=text, font=font16).grid(
+        row=row, column=0, padx=PADX, pady=PADY, sticky="w")
 
-## Planets Number, Np
-label1_Np = tkinter.Label(app, text="Planets Number, Np = ")
-label1_Np.grid(row=4, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Np = tkinter.Entry(app)
-entry_Np.grid(row=4, column=1, padx=PADX, pady=PADY)
-label2_Np = tkinter.Label(app, text="[ea] > 2")
-label2_Np.grid(row=4, column=2, padx=PADX, pady=PADY, sticky="w")
 
-## Zr2/Np
-label1_Zr2overNp = tkinter.Label(app, text="Zr2/Np = ")
-label1_Zr2overNp.grid(row=5, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Zr2overNp = tkinter.Entry(app)
-entry_Zr2overNp.grid(row=5, column=1, padx=PADX, pady=PADY)
-label2_Zr2overNp = tkinter.Label(app, text="...")
-label2_Zr2overNp.grid(row=5, column=2, padx=PADX, pady=PADY, sticky="w")
+def _add_input(key, row, label_text, hint_text, hint_below=False) -> None:
+    tkinter.Label(app, text=label_text).grid(
+        row=row, column=0, padx=PADX, pady=PADY, sticky="e")
+    entry = tkinter.Entry(app)
+    entry.grid(row=row, column=1, padx=PADX, pady=PADY)
+    if hint_below:
+        tkinter.Label(app, text=hint_text).grid(
+            row=row + 1, column=1, padx=PADX, pady=PADY, sticky="w", columnspan=3)
+    else:
+        tkinter.Label(app, text=hint_text).grid(
+            row=row, column=2, padx=PADX, pady=PADY, sticky="w")
+    entries[key] = entry
 
-## Zs1/Np
-label1_Zs1overNp = tkinter.Label(app, text="Zs1/Np = ")
-label1_Zs1overNp.grid(row=6, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Zs1overNp = tkinter.Entry(app)
-entry_Zs1overNp.grid(row=6, column=1, padx=PADX, pady=PADY)
-label2_Zs1overNp = tkinter.Label(app, text="...")
-label2_Zs1overNp.grid(row=6, column=2, padx=PADX, pady=PADY, sticky="w")
 
-## Subject
-label_G = tkinter.Label(app, text="# Involute Gear Spec", font=font16)
-label_G.grid(row=7, column=0, padx=PADX, pady=PADY, sticky="w")
+def build_gui() -> None:
+    global app, textbox, font16, PADX, PADY
+    app = tkinter.Tk()
+    app.title("PGS with tkinter")
+    app.resizable(width=True, height=True)
+    font16 = font.Font(size=12)
+    if sys.platform.startswith("win"):
+        app.iconbitmap("PGS.ico")
+    PADX, PADY = 1, 1
 
-## Shift Factor, Gs1.X
-label1_Gs1X = tkinter.Label(app, text="Shift Factor, Gs1.X = ")
-label1_Gs1X.grid(row=8, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Gs1X = tkinter.Entry(app)
-entry_Gs1X.grid(row=8, column=1, padx=PADX, pady=PADY)
-label2_Gs1X = tkinter.Label(app, text="...")
-label2_Gs1X.grid(row=8, column=2, padx=PADX, pady=PADY, sticky="w")
+    _add_section_label(0, "# Planetary System")
+    for key, row, label_text, hint_text, hint_below in DIRECT_INPUTS:
+        _add_input(key, row, label_text, hint_text, hint_below)
 
-## Shift Factor, Gs2.X
-label1_Gs2X = tkinter.Label(app, text="Shift Factor, Gs2.X = ")
-label1_Gs2X.grid(row=9, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_Gs2X = tkinter.Entry(app)
-entry_Gs2X.grid(row=9, column=1, padx=PADX, pady=PADY)
-label2_Gs2X = tkinter.Label(app, text="...")
-label2_Gs2X.grid(row=9, column=2, padx=PADX, pady=PADY, sticky="w")
+    _add_section_label(7, "# Involute Gear Spec")
 
-## Backlash Factor, B
-label1_B = tkinter.Label(app, text="Backlash Factor, B = ")
-label1_B.grid(row=10, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_B = tkinter.Entry(app)
-entry_B.grid(row=10, column=1, padx=PADX, pady=PADY)
-label2_B = tkinter.Label(app, text="...")
-label2_B.grid(row=10, column=2, padx=PADX, pady=PADY, sticky="w")
+    plot_label = tkinter.Label(app, text="Plot Options = ", font=font16)
+    plot_label.grid(row=16, column=0, padx=PADX, pady=PADY, sticky="e")
+    plot_entry = tkinter.Entry(app)
+    plot_entry.grid(row=16, column=1, padx=PADX, pady=PADY)
+    entries["PlotOption"] = plot_entry
+    tkinter.Label(app, text="1=Stage1, 2=Stage2, 3=Total").grid(
+        row=17, column=1, padx=PADX, pady=PADY, sticky="w")
 
-## Addendum Factor, A
-label1_A = tkinter.Label(app, text="Addendum Factor, A = ")
-label1_A.grid(row=11, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_A = tkinter.Entry(app)
-entry_A.grid(row=11, column=1, padx=PADX, pady=PADY)
-label2_A = tkinter.Label(app, text="...")
-label2_A.grid(row=11, column=2, padx=PADX, pady=PADY, sticky="w")
+    tkinter.Button(app, text="Run", command=button_run_callback, width=10).grid(
+        row=20, column=0, padx=PADX, pady=PADY, sticky="e")
+    tkinter.Button(app, text="Exit", command=button_exit_callback, width=10).grid(
+        row=20, column=5, padx=PADX, pady=PADY, sticky="e")
 
-## Dedendum Factor, D
-label1_D = tkinter.Label(app, text="Dedendum Factor, D = ")
-label1_D.grid(row=12, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_D = tkinter.Entry(app)
-entry_D.grid(row=12, column=1, padx=PADX, pady=PADY)
-label2_D = tkinter.Label(app, text="...")
-label2_D.grid(row=12, column=2, padx=PADX, pady=PADY, sticky="w")
+    textbox = tkinter.Text(master=app, width=70, height=25)
+    textbox.grid(row=3, column=3, sticky="nsew", rowspan=15, columnspan=3)
+    textbox.delete("0.0", "end")
+    textbox.insert("end", "\n########################################")
+    textbox.insert("end", "\n#")
+    textbox.insert("end", "\n# PGS - Planetary Gear Sizing Program")
+    textbox.insert("end", "\n# https://github.com/dymaxionkim/PGS")
+    textbox.insert("end", "\n#")
+    textbox.insert("end", "\n########################################")
+    textbox.insert("end", "\n\n1. Input Parameters.")
+    textbox.insert("end", "\n2. Press Run.")
 
-## Pressure Angle, alpha
-label1_alpha = tkinter.Label(app, text="Pressure Angle, alpha = ")
-label1_alpha.grid(row=13, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_alpha = tkinter.Entry(app)
-entry_alpha.grid(row=13, column=1, padx=PADX, pady=PADY)
-label2_alpha = tkinter.Label(app, text="[deg]")
-label2_alpha.grid(row=13, column=2, padx=PADX, pady=PADY, sticky="w")
 
-## Radius of Hob End, C
-label1_C = tkinter.Label(app, text="Radius of Hob End, C = ")
-label1_C.grid(row=14, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_C = tkinter.Entry(app)
-entry_C.grid(row=14, column=1, padx=PADX, pady=PADY)
-label2_C = tkinter.Label(app, text="[mm]")
-label2_C.grid(row=14, column=2, padx=PADX, pady=PADY, sticky="w")
+def main() -> None:
+    global P1, gears
+    P1 = PGS()
+    gears = {name: GPG() for name in GEAR_ORDER}
+    build_gui()
+    init_parameters()
+    read_parameters()
+    run_calc()
+    app.mainloop()
 
-## Radius of Tooth End, E
-label1_E = tkinter.Label(app, text="Radius of Tooth End, E = ")
-label1_E.grid(row=15, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_E = tkinter.Entry(app)
-entry_E.grid(row=15, column=1, padx=PADX, pady=PADY)
-label2_E = tkinter.Label(app, text="[mm]")
-label2_E.grid(row=15, column=2, padx=PADX, pady=PADY, sticky="w")
 
-## Plot Options
-label1_PlotOption = tkinter.Label(app, text="Plot Options = ", font=font16)
-label1_PlotOption.grid(row=16, column=0, padx=PADX, pady=PADY, sticky="e")
-entry_PlotOption = tkinter.Entry(app)
-entry_PlotOption.grid(row=16, column=1, padx=PADX, pady=PADY)
-label2_PlotOption = tkinter.Label(app, text="1=Stage1, 2=Stage2, 3=Total")
-label2_PlotOption.grid(row=17, column=1, padx=PADX, pady=PADY, sticky="w")
-
-## Button Run
-button_run = tkinter.Button(app, text="Run", command=button_run_callback, width=10)
-button_run.grid(row=20, column=0, padx=PADX, pady=PADY, sticky="e")
-
-## Button exit
-button_exit = tkinter.Button(app, text="Exit", command=button_exit_callback, width=10)
-button_exit.grid(row=20, column=5, padx=PADX, pady=PADY, sticky="e")
-
-## Textbox
-textbox = tkinter.Text(master=app, width=70, height = 25)
-textbox.grid(row=3, column=3, sticky="nsew", rowspan=15, columnspan=3)
-textbox.delete("0.0", "end")
-textbox.insert("end", "\n########################################")
-textbox.insert("end", "\n#")
-textbox.insert("end", "\n# PGS - Planetary Gear Sizing Program")
-textbox.insert("end", "\n# https://github.com/dymaxionkim/PGS")
-textbox.insert("end", "\n#")
-textbox.insert("end", "\n########################################")
-textbox.insert("end", "\n\n1. Input Parameters.")
-textbox.insert("end", "\n2. Press Run.")
-
-################
-# App Start
-## Planetary Gear Sizing Class
-P1 = PGS()
-## Gear Class
-Gs1 = GPG()
-Gp1 = GPG()
-Gr1 = GPG()
-Gs2 = GPG()
-Gp2 = GPG()
-Gr2 = GPG()
-# Init
-init_parameters()
-read_parameters()
-calcGPG()
-# GUI Loop
-app.mainloop()
+if __name__ == "__main__":
+    main()

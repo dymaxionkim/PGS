@@ -1,210 +1,289 @@
+"""Planetary Gear Set (PGS) sizing.
+
+Computes gear ratios, gear sizes and geometric feasibility checks for
+simple and Wolfrom planetary gear sets.
+
+Gear type codes
+---------------
+0  Simple planetary gear set
+1  Wolfrom (teeth difference = 1)
+2  Wolfrom (teeth difference = 0.5)
+3  Wolfrom (teeth difference = 2)
+4  Wolfrom (teeth difference = 3)
+5  Wolfrom (teeth difference = 4)
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
 import numpy as np
 
+STANDARD_PRESSURE_ANGLE: float = 20.0
+MIN_RIM_FOR_TRIMMING: float = 16.0
+ROUND_PRECISION: int = 6
+
+# Teeth-difference lookup keyed by gear type code.
+_TYPE_DIFFERENCE: dict[int, float] = {
+    0: 1.0,
+    1: 1.0,
+    2: 0.5,
+    3: 2.0,
+    4: 3.0,
+    5: 4.0,
+}
+
+
+@dataclass
+class CheckResult:
+    """Results of every geometric feasibility check (status strings)."""
+
+    non_factorizing_1: str = ""
+    non_factorizing_2: str = ""
+    equal_distance_1: str = ""
+    equal_distance_2: str = ""
+    planets_interference_1: str = ""
+    planets_interference_2: str = ""
+    involute_interference_1: str = ""
+    involute_interference_2: str = ""
+    trimming_interference_1: str = ""
+    trimming_interference_2: str = ""
+    teeth_number_integer_1: str = ""
+    teeth_number_integer_2: str = ""
+
+
 class PGS:
-    def __init__(self):
-        self.TYPE = 0 # 0=Simple, 1=Wolfrom(diff=1), 2=Wolfrom(diff=0.5), 3=Wolfrom(diff=2), 4=Wolfrom(diff=3), 5=Wolfrom(diff=4)
-        self.alpha = 20.0 # Pressure Angle [deg]
-        self.m = 0.5 # Common Module
-        self.Np = 4  # Planets Number (it must be even number)
-        self.Zr2_MultipleNp = 15
-        self.Zs1_MultipleNp = 4
+    """Planetary Gear Set sizing calculator.
 
-    def Calc(self):
-        # Calc
-        self.m1 = self.m # Module1
-        self.m2 = self.m # Module2 (No need for Simple Type)
-        if self.TYPE==2:
-            self.TYPE_DIFF=0.5
-        elif self.TYPE==3:
-            self.TYPE_DIFF=2.0
-        elif self.TYPE==4:
-            self.TYPE_DIFF=3.0
-        elif self.TYPE==5:
-            self.TYPE_DIFF=4.0
-        else:
-            self.TYPE_DIFF=1.0
-        self.Zr1_MultipleNp = self.Zr2_MultipleNp+self.TYPE_DIFF
-        self.Zs1 = self.Zs1_MultipleNp*self.Np # Teeth Number of Sun
-        self.Zr1 = -self.Zr1_MultipleNp*self.Np # Teeth Number of Ring1
-        self.Zp1 = (-self.Zr1-self.Zs1)/2 # Teeth Number of Planet1
-        self.Ds1 = self.Zs1*self.m1 # Dia of Sun1
-        self.Dp1 = self.Zp1*self.m1 # Dia of Planet1
-        self.Dr1 = -self.Zr1*self.m1 # Dia of Ring1
-        self.Dc = self.Ds1+self.Dp1 # Dia of Carrier
-        self.Gp1s = self.Dp1/self.Ds1 # Ratio of Planet1-Sun
-        if self.TYPE!=0:
-            self.Zr2 = -self.Zr2_MultipleNp*self.Np # Teeth Number of Ring2
-            self.Zp2 = ((-self.Zr2*self.m2)-self.Dc)/(self.m2) # Teeth Number of Planet2 (No need for Simple Type)
-            self.Dp2 = self.Zp2*self.m2 # Dia of Planet2
-            self.Ds2 = self.Dc-self.Dp2 # Dia of Sun2
-            self.Zs2 = self.Ds2/self.m2 # Teeth Number of Sun2
-            self.Dr2 = -self.Zr2*self.m2 # Dia of Ring2
-            self.Gr2p2 = self.Dr2/self.Dp2 # Ratio of Ring-Planet2    
-            self.G1 = round(1+self.Gr2p2*self.Gp1s,6) # Ratio Total (Ring2 Fiexed, Carrier Output)
-            self.G2 = -round(self.Gr2p2*self.Gp1s,6) # Ratio Total (Carrier Fixed, Ring2 Output)
-            self.L1 = self.Dr1/self.Ds1
-            self.L2 = (self.Dr1*self.Dp2)/(self.Dr2*self.Dp1)
-            self.G22 = round((1+self.L1)/(1-self.L2),6) # Ratio Total (Type-3K : Carrier Free, Ring Output)
-            if self.L2>1:
-                self.G22 = -self.G22
-        else:
-            self.G3 = round(1-self.Zr1/self.Zs1,6) # Ratio Total (Carrier Output)
-            self.G4 = -round(-self.Zr1/self.Zs1,6) # Ratio Total (Ring1 Output)
+    Set the input attributes, then call :meth:`calc`, optionally followed
+    by :meth:`output` (stdout report) and :meth:`checks_run` (geometric
+    feasibility checks).
+    """
 
-    def Output(self):
-        # Output
-        if self.TYPE!=0:
-            print("\n##### Wolfrom Planetary Gear Set")
-            print("### Ratio")
-            print("Ratio (Sun-Planet1) = ",self.Gp1s,"")
-            print("Ratio (Planet2-Ring2) = ",self.Gr2p2,"")
-            print("Ratio Total (Ring2 Fiexed, Carrier Output) = ",self.G1,"")
-            print("Ratio Total (Carrier Fixed, Ring2 Output) = ",self.G2,"")
-            print("Ratio Total (Type-3K : Carrier Free, Ring2 Output) = ",self.G22,"")
-            print("### Size")
-            print("Sun = ",self.Ds1," [mm],  ",self.Zs1," [ea]")
-            print("Planet1 = ",self.Dp1," [mm],  ",self.Zp1," [ea]")
-            print("Ring1 = ",self.Dr1," [mm],  ",self.Zr1," [ea]")
-            print("Planet2 = ",self.Dp2," [mm],  ",self.Zp2," [ea]")
-            print("Ring2 = ",self.Dr2," [mm],  ",self.Zr2," [ea]")
-        else:
-            print("\n##### Simple Planetary Gear Set")
-            print("### Ratio")
-            print("Ratio (Sun-Planet1) = ",self.Gp1s,"")
-            print("Ratio (Total, Carrier Output) = ",self.G3," (1-stage),  ",self.G3**2," (2-stages),  ",self.G3**3," (3-stages)")
-            print("Ratio (Total, Ring1 Output) = ",self.G4," (1-stage),  ",self.G4**2," (2-stages),  ",self.G4**3," (3-stages)")
-            print("### Size")
-            print("Sun = ",self.Ds1," [mm],  ",self.Zs1," [ea]")
-            print("Planet1 = ",self.Dp1," [mm],  ",self.Zp1," [ea]")
-            print("Ring1 = ",self.Dr1," [mm],  ",self.Zr1," [ea]")
+    def __init__(self) -> None:
+        # --- Inputs ---
+        self.gear_type: int = 1
+        self.pressure_angle: float = 20.0
+        self.module: float = 0.5
+        self.num_planets: int = 4
+        self.zr2_multiple_np: int = 15
+        self.zs1_multiple_np: int = 4
+        # --- Derived constants ---
+        self.module1: float = 0.0
+        self.module2: float = 0.0
+        self.type_diff: float = 1.0
+        self.zr1_multiple_np: float = 0.0
+        # --- Stage-1 teeth & diameters ---
+        self.zs1: float = 0.0
+        self.zr1: float = 0.0
+        self.zp1: float = 0.0
+        self.ds1: float = 0.0
+        self.dp1: float = 0.0
+        self.dr1: float = 0.0
+        self.dc: float = 0.0
+        self.gp1s: float = 0.0
+        # --- Stage-2 (Wolfrom) teeth, diameters & ratios ---
+        self.zr2: float = 0.0
+        self.zp2: float = 0.0
+        self.zs2: float = 0.0
+        self.dp2: float = 0.0
+        self.ds2: float = 0.0
+        self.dr2: float = 0.0
+        self.gr2p2: float = 0.0
+        self.g1: float = 0.0
+        self.g2: float = 0.0
+        self.g22: float = 0.0
+        self.l1: float = 0.0
+        self.l2: float = 0.0
+        # --- Simple-only ratios ---
+        self.g3: float = 0.0
+        self.g4: float = 0.0
+        # --- Check results ---
+        self.checks: CheckResult = CheckResult()
 
-    def Checks(self):
-        # Checks
+    @property
+    def is_wolfrom(self) -> bool:
+        """Whether this design is a Wolfrom (two-stage) gear set."""
+        return self.gear_type != 0
+
+    # ------------------------------------------------------------------ calc
+    def calc(self) -> None:
+        """Compute derived teeth counts, diameters and ratios."""
+        self.module1 = self.module
+        self.module2 = self.module
+        self.type_diff = _TYPE_DIFFERENCE.get(self.gear_type, 1.0)
+        self.zr1_multiple_np = self.zr2_multiple_np + self.type_diff
+
+        self.zs1 = self.zs1_multiple_np * self.num_planets
+        self.zr1 = -self.zr1_multiple_np * self.num_planets
+        self.zp1 = (-self.zr1 - self.zs1) / 2
+
+        self.ds1 = self.zs1 * self.module1
+        self.dp1 = self.zp1 * self.module1
+        self.dr1 = -self.zr1 * self.module1
+        self.dc = self.ds1 + self.dp1
+        self.gp1s = self.dp1 / self.ds1
+
+        if self.is_wolfrom:
+            self._calc_stage2()
+        else:
+            self.g3 = round(1 - self.zr1 / self.zs1, ROUND_PRECISION)
+            self.g4 = -round(-self.zr1 / self.zs1, ROUND_PRECISION)
+
+    def _calc_stage2(self) -> None:
+        self.zr2 = -self.zr2_multiple_np * self.num_planets
+        self.zp2 = ((-self.zr2 * self.module2) - self.dc) / self.module2
+        self.dp2 = self.zp2 * self.module2
+        self.ds2 = self.dc - self.dp2
+        self.zs2 = self.ds2 / self.module2
+        self.dr2 = -self.zr2 * self.module2
+        self.gr2p2 = self.dr2 / self.dp2
+
+        self.g1 = round(1 + self.gr2p2 * self.gp1s, ROUND_PRECISION)
+        self.g2 = -round(self.gr2p2 * self.gp1s, ROUND_PRECISION)
+        self.l1 = self.dr1 / self.ds1
+        self.l2 = (self.dr1 * self.dp2) / (self.dr2 * self.dp1)
+        self.g22 = round((1 + self.l1) / (1 - self.l2), ROUND_PRECISION)
+        if self.l2 > 1:
+            self.g22 = -self.g22
+
+    # --------------------------------------------------------------- output
+    def output(self) -> None:
+        """Print ratios and gear sizes to stdout."""
+        if self.is_wolfrom:
+            self._output_wolfrom()
+        else:
+            self._output_simple()
+
+    def _output_wolfrom(self) -> None:
+        print("\n##### Wolfrom Planetary Gear Set")
+        print("### Ratio")
+        print("Ratio (Sun-Planet1) = ", self.gp1s, "")
+        print("Ratio (Planet2-Ring2) = ", self.gr2p2, "")
+        print("Ratio Total (Ring2 Fiexed, Carrier Output) = ", self.g1, "")
+        print("Ratio Total (Carrier Fixed, Ring2 Output) = ", self.g2, "")
+        print("Ratio Total (Type-3K : Carrier Free, Ring2 Output) = ", self.g22, "")
+        print("### Size")
+        print("Sun = ", self.ds1, " [mm],  ", self.zs1, " [ea]")
+        print("Planet1 = ", self.dp1, " [mm],  ", self.zp1, " [ea]")
+        print("Ring1 = ", self.dr1, " [mm],  ", self.zr1, " [ea]")
+        print("Planet2 = ", self.dp2, " [mm],  ", self.zp2, " [ea]")
+        print("Ring2 = ", self.dr2, " [mm],  ", self.zr2, " [ea]")
+
+    def _output_simple(self) -> None:
+        print("\n##### Simple Planetary Gear Set")
+        print("### Ratio")
+        print("Ratio (Sun-Planet1) = ", self.gp1s, "")
+        print("Ratio (Total, Carrier Output) = ", self.g3, " (1-stage),  ",
+              self.g3 ** 2, " (2-stages),  ", self.g3 ** 3, " (3-stages)")
+        print("Ratio (Total, Ring1 Output) = ", self.g4, " (1-stage),  ",
+              self.g4 ** 2, " (2-stages),  ", self.g4 ** 3, " (3-stages)")
+        print("### Size")
+        print("Sun = ", self.ds1, " [mm],  ", self.zs1, " [ea]")
+        print("Planet1 = ", self.dp1, " [mm],  ", self.zp1, " [ea]")
+        print("Ring1 = ", self.dr1, " [mm],  ", self.zr1, " [ea]")
+
+    # --------------------------------------------------------------- checks
+    def checks_run(self) -> None:
+        """Run all geometric feasibility checks and print the results."""
         print("\n\n### Checks")
-        ## Sequential Mesh Condition (Non-Factorizing) 1
-        print("# Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : ")
-        if (self.Zs1%self.Np)!=0 and (-self.Zr1%self.Np)!=0:
-            print("Good for noise")
-            self.NonFactorizing1 = "Good for noise"
-        else:
-            print("No good for noise")
-            self.NonFactorizing1 = "No good for noise"
-        ## Sequential Mesh Condition (Non-Factorizing) 2
-        if self.TYPE!=0:
-            print("# Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : ")
-            if (self.Zs2%self.Np)!=0 and (-self.Zr2%self.Np)!=0:
-                print("Good for noise")
-                self.NonFactorizing2 = "Good for noise"
-            else:
-                print("No good for noise")
-                self.NonFactorizing2 = "No good for noise"
-        ## Check Planets Numbers (Equal Distance Condition) 1
-        print("# Planet Numbers (Equal Distance Condition) 1 : ")
-        if self.TYPE==2:
-            if (self.Zs1-self.Zr1)%(self.Np*self.TYPE_DIFF)==0:
-                print("OK")
-                self.EqualDistance1 = "OK"
-            else:
-                print("Fail")
-                self.EqualDistance1 = "Fail"
-        else:
-            if (self.Zs1-self.Zr1)%self.Np==0:
-                print("OK")
-                self.EqualDistance1 = "OK"
-            else:
-                print("Fail")
-                self.EqualDistance1 = "Fail"
-        ## Check Planets Numbers (Equal Distance Condition) 2
-        print("# Planet Numbers (Equal Distance Condition) 2 : ")
-        if self.TYPE!=0:
-            if -self.Zr2%self.Np==0:
-                print("OK")
-                self.EqualDistance2 = "OK"
-            else:
-                print("Fail")
-                self.EqualDistance2 = "Fail"
-        ## Check Planets Interference (Non-Overlap Condition) 1
-        print("# Planets Interference (Non-Overlap Condition) 1 : ")
-        if self.alpha==20 and self.Np<(np.pi/np.arcsin((self.Zp1+2)/(self.Zp1+self.Zs1))):
-            print("OK")
-            self.PlanetsInterference1 = "OK"
-        else:
-            print("Fail")
-            self.PlanetsInterference1 = "Fail"
-        ## Check Planets Interference (Non-Overlap Condition) 2
-        if self.TYPE!=0:
-            print("# Planets Interference (Non-Overlap Condition) 2 : ")
-            if self.alpha==20 and self.Np<(np.pi/np.arcsin((self.Zp2+2)/(self.Zp2+self.Zs2))):
-                print("OK")
-                self.PlanetsInterference2 = "OK"
-            else:
-                print("Fail")
-                self.PlanetsInterference2 = "Fail"
-        if self.alpha!=20:
-            print("No Check (Non-Standard) ")
-        ## Check Involute Interference Condition 1
-        print("# Involute Interference Condition 1 : ")
-        temp=(self.Zp1*np.sin(np.deg2rad(self.alpha)))**2
-        temp2 = (temp-4)/(2*temp-4)
-        if self.alpha==20 and -self.Zr1>=temp2:
-            print("OK")
-            self.InvoluteInterference1 = "OK"
-        else:
-            print("Fail")
-            self.InvoluteInterference1 = "Fail"
-        ## Check Involute Interference Condition 2
-        if self.TYPE!=0:
-            print("# Involute Interference Condition 2 : ")
-            temp=(self.Zp2*np.sin(np.deg2rad(self.alpha)))**2
-            temp2 = (temp-4)/(2*temp-4)
-            if self.alpha==20 and -self.Zr2>=temp2:
-                print("OK")
-                self.InvoluteInterference2 = "OK"
-            else:
-                print("Fail")
-                self.InvoluteInterference2 = "Fail"
-        if self.alpha!=20:
-            print("No Check (Non-Standard) ")
-        ## Check Trimming Interference 1
-        print("# Trimming Interference 1 : ")
-        if self.alpha==20 and (-self.Zr1-self.Zp1)>=16:
-            print("OK")
-            self.TrimmingInterference1 = "OK"
-        else:
-            print("Fail")
-            self.TrimmingInterference1 = "Fail"
-        ## Check Trimming Interference 2
-        if self.TYPE!=0:
-            print("# Trimming Interference 2 : ")
-            if self.alpha==20 and (-self.Zr2-self.Zp2)>=16:
-                print("OK")
-                self.TrimmingInterference2 = "OK"
-            else:
-                print("Fail")
-                self.TrimmingInterference2 = "Fail"
-        if self.alpha!=20:
-            print("No Check (Non-Standard) ")
-            self.TrimmingInterference1 = "No Check (Non-Standard)"
-        ## Check Teeth Numbers which is Integer
-        print("# Teeth Numbers which is Integer 1 : ")
-        if round(float(self.Zs1),6).is_integer() and round(float(self.Zp1),6).is_integer() and round(float(self.Zr1),6).is_integer():
-            print("OK")
-            self.TeethNumberInteger1 = "OK"
-        else:
-            print("Fail")
-            self.TeethNumberInteger1 = "Fail"
-        if self.TYPE!=0:
-            print("# Teeth Numbers which is Integer 2 : ")
-            if round(float(self.Zs2),6).is_integer() and round(float(self.Zp2),6).is_integer() and round(float(self.Zr2),6).is_integer():
-                print("OK")
-                self.TeethNumberInteger2 = "OK"
-            else:
-                print("Fail")
-                self.TeethNumberInteger2 = "Fail"
+        self._check_non_factorizing()
+        self._check_equal_distance()
+        self._check_planets_interference()
+        self._check_involute_interference()
+        self._check_trimming_interference()
+        self._check_teeth_integer()
 
-"""
-P1 = PGS()
-P1.Calc()
-P1.Output()
-P1.Checks()
-"""
+    @staticmethod
+    def _label(condition: bool, ok: str, fail: str) -> str:
+        return ok if condition else fail
+
+    @staticmethod
+    def _emit(heading: str, result: str) -> None:
+        print(f"# {heading} : ")
+        print(result)
+
+    def _check_non_factorizing(self) -> None:
+        cond = (self.zs1 % self.num_planets != 0
+                and (-self.zr1) % self.num_planets != 0)
+        self.checks.non_factorizing_1 = self._label(cond, "Good for noise", "No good for noise")
+        self._emit("Sequential Mesh Condition (Non-Factorizing, Not Required) 1",
+                   self.checks.non_factorizing_1)
+        if self.is_wolfrom:
+            cond = (self.zs2 % self.num_planets != 0
+                    and (-self.zr2) % self.num_planets != 0)
+            self.checks.non_factorizing_2 = self._label(cond, "Good for noise", "No good for noise")
+            self._emit("Sequential Mesh Condition (Non-Factorizing, Not Required) 2",
+                       self.checks.non_factorizing_2)
+
+    def _check_equal_distance(self) -> None:
+        modulus = (self.num_planets * self.type_diff
+                   if self.gear_type == 2 else self.num_planets)
+        cond = (self.zs1 - self.zr1) % modulus == 0
+        self.checks.equal_distance_1 = self._label(cond, "OK", "Fail")
+        self._emit("Planet Numbers (Equal Distance Condition) 1",
+                   self.checks.equal_distance_1)
+        if self.is_wolfrom:
+            cond = (-self.zr2) % self.num_planets == 0
+            self.checks.equal_distance_2 = self._label(cond, "OK", "Fail")
+            self._emit("Planet Numbers (Equal Distance Condition) 2",
+                       self.checks.equal_distance_2)
+
+    def _check_planets_interference(self) -> None:
+        cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
+                and self.num_planets < np.pi / np.arcsin((self.zp1 + 2) / (self.zp1 + self.zs1)))
+        self.checks.planets_interference_1 = self._label(cond, "OK", "Fail")
+        self._emit("Planets Interference (Non-Overlap Condition) 1",
+                   self.checks.planets_interference_1)
+        if self.is_wolfrom:
+            cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
+                    and self.num_planets < np.pi / np.arcsin((self.zp2 + 2) / (self.zp2 + self.zs2)))
+            self.checks.planets_interference_2 = self._label(cond, "OK", "Fail")
+            self._emit("Planets Interference (Non-Overlap Condition) 2",
+                       self.checks.planets_interference_2)
+        if self.pressure_angle != STANDARD_PRESSURE_ANGLE:
+            print("No Check (Non-Standard) ")
+
+    def _involute_thresh(self, zp: float) -> float:
+        sin_a = np.sin(np.deg2rad(self.pressure_angle))
+        temp = (zp * sin_a) ** 2
+        return (temp - 4) / (2 * temp - 4)
+
+    def _check_involute_interference(self) -> None:
+        cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
+                and (-self.zr1) >= self._involute_thresh(self.zp1))
+        self.checks.involute_interference_1 = self._label(cond, "OK", "Fail")
+        self._emit("Involute Interference Condition 1", self.checks.involute_interference_1)
+        if self.is_wolfrom:
+            cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
+                    and (-self.zr2) >= self._involute_thresh(self.zp2))
+            self.checks.involute_interference_2 = self._label(cond, "OK", "Fail")
+            self._emit("Involute Interference Condition 2", self.checks.involute_interference_2)
+        if self.pressure_angle != STANDARD_PRESSURE_ANGLE:
+            print("No Check (Non-Standard) ")
+
+    def _check_trimming_interference(self) -> None:
+        cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
+                and (-self.zr1 - self.zp1) >= MIN_RIM_FOR_TRIMMING)
+        self.checks.trimming_interference_1 = self._label(cond, "OK", "Fail")
+        self._emit("Trimming Interference 1", self.checks.trimming_interference_1)
+        if self.is_wolfrom:
+            cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
+                    and (-self.zr2 - self.zp2) >= MIN_RIM_FOR_TRIMMING)
+            self.checks.trimming_interference_2 = self._label(cond, "OK", "Fail")
+            self._emit("Trimming Interference 2", self.checks.trimming_interference_2)
+        if self.pressure_angle != STANDARD_PRESSURE_ANGLE:
+            print("No Check (Non-Standard) ")
+            self.checks.trimming_interference_1 = "No Check (Non-Standard)"
+
+    def _check_teeth_integer(self) -> None:
+        def is_int(v: float) -> bool:
+            return round(float(v), ROUND_PRECISION).is_integer()
+
+        cond = is_int(self.zs1) and is_int(self.zp1) and is_int(self.zr1)
+        self.checks.teeth_number_integer_1 = self._label(cond, "OK", "Fail")
+        self._emit("Teeth Numbers which is Integer 1", self.checks.teeth_number_integer_1)
+        if self.is_wolfrom:
+            cond = is_int(self.zs2) and is_int(self.zp2) and is_int(self.zr2)
+            self.checks.teeth_number_integer_2 = self._label(cond, "OK", "Fail")
+            self._emit("Teeth Numbers which is Integer 2", self.checks.teeth_number_integer_2)
