@@ -588,11 +588,8 @@ def build_gui() -> None:
     # --- left column : inputs --------------------------------------------
     left = ttk.Frame(main, style="App.TFrame")
     left.grid(row=0, column=0, sticky="n", padx=(0, PAD))
-    ttk.Label(left, text="Planetary Gear Sizing",
-              style="Title.TLabel").grid(row=0, column=0, sticky="w",
-                                         pady=(0, PAD))
     container = ttk.Frame(left, style="App.TFrame")
-    container.grid(row=1, column=0, sticky="n")
+    container.grid(row=0, column=0, sticky="n")
     _build_section(container, "Planetary System", PLANETARY_INPUTS)
     _build_section(container, "Involute Gear Spec", GEAR_INPUTS)
     lf_plot = ttk.LabelFrame(container, text="Plot", padding=PAD)
@@ -614,10 +611,10 @@ def build_gui() -> None:
     # --- bottom bar : actions -------------------------------------------
     bar = ttk.Frame(main, style="App.TFrame")
     bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(PAD, 0))
-    ttk.Button(bar, text="Run", style="Accent.TButton",
-               command=button_run_callback).pack(side="right")
     ttk.Button(bar, text="Exit", style="Danger.TButton",
                command=button_exit_callback).pack(side="right", padx=(0, PAD))
+    ttk.Button(bar, text="Run", style="Accent.TButton",
+               command=button_run_callback).pack(side="right", padx=(0, PAD))
 
 
 def main() -> None:
