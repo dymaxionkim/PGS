@@ -411,6 +411,14 @@ def save_output() -> None:
 
 
 # ---------------------------------------------------------------- callbacks
+def toggle_simple_fields() -> None:
+    """Disable Wolfrom-only fields when the Simple Type is selected."""
+    is_simple = entries["TYPE"].get() == "Simple"
+    state = "disabled" if is_simple else "normal"
+    entries["Zr2overNp"].configure(state=state)
+    entries["Gs2X"].configure(state=state)
+
+
 def button_run_callback() -> None:
     read_parameters()
     run_calc()
@@ -504,6 +512,8 @@ def _build_field(parent, row, key, label_text, hint_text, hint_below) -> int:
         entry = ttk.Entry(parent)
     entry.grid(row=row, column=1, padx=PADX, pady=PADY, sticky="ew")
     entries[key] = entry
+    if key == "TYPE":
+        entry.bind("<<ComboboxSelected>>", lambda _e: toggle_simple_fields())
     if hint_text:
         if hint_below:
             ttk.Label(parent, text=hint_text, style="CardMuted.TLabel").grid(
@@ -623,6 +633,7 @@ def main() -> None:
     gears = {name: GPG() for name in GEAR_ORDER}
     build_gui()
     init_parameters()
+    toggle_simple_fields()
     read_parameters()
     run_calc()
     app.mainloop()
