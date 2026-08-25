@@ -5,12 +5,28 @@ simple and Wolfrom planetary gear sets.
 
 Gear type codes
 ---------------
-0  Simple planetary gear set
-1  Wolfrom (teeth difference = 1)
-2  Wolfrom (teeth difference = 0.5)
-3  Wolfrom (teeth difference = 2)
-4  Wolfrom (teeth difference = 3)
-5  Wolfrom (teeth difference = 4)
+0   Simple planetary gear set
+1   Wolfrom (teeth difference = 1)
+2   Wolfrom (teeth difference = 0.5)
+3   Wolfrom (teeth difference = 2)
+4   Wolfrom (teeth difference = 3)
+5   Wolfrom (teeth difference = 4)
+6   Wolfrom (teeth difference = 5)
+7   Wolfrom (teeth difference = 6)
+8   Wolfrom (teeth difference = 7)
+9   Wolfrom (teeth difference = 8)
+10  Wolfrom (teeth difference = 9)
+11  Wolfrom (teeth difference = 10)
+12  Wolfrom (teeth difference = 11)
+13  Wolfrom (teeth difference = 12)
+14  Wolfrom (teeth difference = 13)
+15  Wolfrom (teeth difference = 14)
+16  Wolfrom (teeth difference = 15)
+17  Wolfrom (teeth difference = 16)
+18  Wolfrom (teeth difference = 17)
+19  Wolfrom (teeth difference = 18)
+20  Wolfrom (teeth difference = 19)
+21  Wolfrom (teeth difference = 20)
 """
 
 from __future__ import annotations
@@ -31,6 +47,22 @@ _TYPE_DIFFERENCE: dict[int, float] = {
     3: 2.0,
     4: 3.0,
     5: 4.0,
+    6: 5.0,
+    7: 6.0,
+    8: 7.0,
+    9: 8.0,
+    10: 9.0,
+    11: 10.0,
+    12: 11.0,
+    13: 12.0,
+    14: 13.0,
+    15: 14.0,
+    16: 15.0,
+    17: 16.0,
+    18: 17.0,
+    19: 18.0,
+    20: 19.0,
+    21: 20.0,
 }
 
 
@@ -64,17 +96,16 @@ class PGS:
         # --- Inputs ---
         self.gear_type: int = 1
         self.pressure_angle: float = 20.0
-        self.module: float = 0.5
+        self.module1: float = 0.5
+        self.module2: float = 0.5
         self.num_planets: int = 4
-        self.zr2_multiple_np: int = 15
-        self.zs1_multiple_np: int = 4
+        self.zp2: float = 18.0
+        self.zs1: float = 16.0
+        self.shift_s1: float = 0.0
+        self.shift_p1: float = 0.0
         # --- Derived constants ---
-        self.module1: float = 0.0
-        self.module2: float = 0.0
         self.type_diff: float = 1.0
-        self.zr1_multiple_np: float = 0.0
         # --- Stage-1 teeth & diameters ---
-        self.zs1: float = 0.0
         self.zr1: float = 0.0
         self.zp1: float = 0.0
         self.ds1: float = 0.0
@@ -84,7 +115,6 @@ class PGS:
         self.gp1s: float = 0.0
         # --- Stage-2 (Wolfrom) teeth, diameters & ratios ---
         self.zr2: float = 0.0
-        self.zp2: float = 0.0
         self.zs2: float = 0.0
         self.dp2: float = 0.0
         self.ds2: float = 0.0
@@ -109,19 +139,34 @@ class PGS:
     # ------------------------------------------------------------------ calc
     def calc(self) -> None:
         """Compute derived teeth counts, diameters and ratios."""
-        self.module1 = self.module
-        self.module2 = self.module
         self.type_diff = _TYPE_DIFFERENCE.get(self.gear_type, 1.0)
-        self.zr1_multiple_np = self.zr2_multiple_np + self.type_diff
 
-        self.zs1 = self.zs1_multiple_np * self.num_planets
-        self.zr1 = -self.zr1_multiple_np * self.num_planets
+        # Ring tooth counts are decided in the zero-shift state: solve the
+        # layout with standard pitch circles (no shift factors) and round
+        # the ring teeth to integers, so both ring gears always have whole
+        # tooth numbers:
+        #   |zr1| = |zr2| + diff*Np
+        #   |zr2| = zp2 + dc0/m2        (ring2 internal mesh at carrier)
+        #   dc0   = m1*(zs1 + |zr1|)/2  (zero-shift carrier diameter)
+        # which reduces to
+        #   |zr1|*(m2 - m1/2) = m1*zs1/2 + m2*(zp2 + diff*Np)
+        denom = self.module2 - self.module1 / 2.0
+        numer = (self.module1 * self.zs1 / 2.0
+                 + self.module2 * (self.zp2 + self.type_diff * self.num_planets))
+        zr1_real = numer / denom
+        self.zr1 = -float(np.floor(zr1_real + 0.5))
+        self.zr2 = -float(np.floor(zr1_real - self.type_diff * self.num_planets + 0.5))
         self.zp1 = (-self.zr1 - self.zs1) / 2
 
         self.ds1 = self.zs1 * self.module1
         self.dp1 = self.zp1 * self.module1
         self.dr1 = -self.zr1 * self.module1
-        self.dc = self.ds1 + self.dp1
+        # Carrier diameter: operating centre distance of the shifted
+        # sun-planet mesh (linear model - consistent with the offset
+        # circle radii m*(z/2 + X) drawn by the generators):
+        #   dc/2 = m1*(zs1 + zp1)/2 + m1*(xs1 + xp1)
+        self.dc = (self.ds1 + self.dp1
+                   + 2.0 * self.module1 * (self.shift_s1 + self.shift_p1))
         self.gp1s = self.dp1 / self.ds1
 
         if self.is_wolfrom:
@@ -131,8 +176,9 @@ class PGS:
             self.g4 = -round(-self.zr1 / self.zs1, ROUND_PRECISION)
 
     def _calc_stage2(self) -> None:
-        self.zr2 = -self.zr2_multiple_np * self.num_planets
-        self.zp2 = ((-self.zr2 * self.module2) - self.dc) / self.module2
+        # Ring2 keeps its integer tooth count from calc(); the stage-2
+        # planets sit on the carrier radius and the ring's profile shift
+        # absorbs the remaining mismatch (see finalize_parameters).
         self.dp2 = self.zp2 * self.module2
         self.ds2 = self.dc - self.dp2
         self.zs2 = self.ds2 / self.module2
@@ -210,8 +256,7 @@ class PGS:
         self._emit("Sequential Mesh Condition (Non-Factorizing, Not Required) 1",
                    self.checks.non_factorizing_1)
         if self.is_wolfrom:
-            cond = (self.zs2 % self.num_planets != 0
-                    and (-self.zr2) % self.num_planets != 0)
+            cond = (-self.zr2) % self.num_planets != 0
             self.checks.non_factorizing_2 = self._label(cond, "Good for noise", "No good for noise")
             self._emit("Sequential Mesh Condition (Non-Factorizing, Not Required) 2",
                        self.checks.non_factorizing_2)
@@ -237,7 +282,8 @@ class PGS:
                    self.checks.planets_interference_1)
         if self.is_wolfrom:
             cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
-                    and self.num_planets < np.pi / np.arcsin((self.zp2 + 2) / (self.zp2 + self.zs2)))
+                    and self.num_planets < np.pi / np.arcsin(
+                        self.module2 * (self.zp2 + 2) / self.dc))
             self.checks.planets_interference_2 = self._label(cond, "OK", "Fail")
             self._emit("Planets Interference (Non-Overlap Condition) 2",
                        self.checks.planets_interference_2)
@@ -284,6 +330,6 @@ class PGS:
         self.checks.teeth_number_integer_1 = self._label(cond, "OK", "Fail")
         self._emit("Teeth Numbers which is Integer 1", self.checks.teeth_number_integer_1)
         if self.is_wolfrom:
-            cond = is_int(self.zs2) and is_int(self.zp2) and is_int(self.zr2)
+            cond = is_int(self.zp2) and is_int(self.zr2)
             self.checks.teeth_number_integer_2 = self._label(cond, "OK", "Fail")
             self._emit("Teeth Numbers which is Integer 2", self.checks.teeth_number_integer_2)

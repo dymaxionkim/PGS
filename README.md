@@ -16,6 +16,22 @@ and provides a ttk-based graphical interface.
 | Wolfrom (diff=2) | 3 | Wolfrom set, teeth difference = 2 |
 | Wolfrom (diff=3) | 4 | Wolfrom set, teeth difference = 3 |
 | Wolfrom (diff=4) | 5 | Wolfrom set, teeth difference = 4 |
+| Wolfrom (diff=5) | 6 | Wolfrom set, teeth difference = 5 |
+| Wolfrom (diff=6) | 7 | Wolfrom set, teeth difference = 6 |
+| Wolfrom (diff=7) | 8 | Wolfrom set, teeth difference = 7 |
+| Wolfrom (diff=8) | 9 | Wolfrom set, teeth difference = 8 |
+| Wolfrom (diff=9) | 10 | Wolfrom set, teeth difference = 9 |
+| Wolfrom (diff=10) | 11 | Wolfrom set, teeth difference = 10 |
+| Wolfrom (diff=11) | 12 | Wolfrom set, teeth difference = 11 |
+| Wolfrom (diff=12) | 13 | Wolfrom set, teeth difference = 12 |
+| Wolfrom (diff=13) | 14 | Wolfrom set, teeth difference = 13 |
+| Wolfrom (diff=14) | 15 | Wolfrom set, teeth difference = 14 |
+| Wolfrom (diff=15) | 16 | Wolfrom set, teeth difference = 15 |
+| Wolfrom (diff=16) | 17 | Wolfrom set, teeth difference = 16 |
+| Wolfrom (diff=17) | 18 | Wolfrom set, teeth difference = 17 |
+| Wolfrom (diff=18) | 19 | Wolfrom set, teeth difference = 18 |
+| Wolfrom (diff=19) | 20 | Wolfrom set, teeth difference = 19 |
+| Wolfrom (diff=20) | 21 | Wolfrom set, teeth difference = 20 |
 
 ## Gear Set Architecture
 
@@ -73,12 +89,14 @@ Or use the platform launcher:
 | Parameter | Description |
 |-----------|-------------|
 | Type | Gearbox type from the table above |
-| Module, m | Gear module [mm], > 0 |
+| Module1, m1 | Stage-1 gear module [mm], > 0 |
+| Module2, m2 | Stage-2 gear module [mm], > 0 |
 | Np | Number of planets [ea], > 2 |
-| Zr2 / Np | Ring gear stage 2 teeth ÷ Np; defines outer diameter |
-| Zs1 / Np | Sun gear stage 1 teeth ÷ Np; defines gear ratio |
+| Zp2 | Stage-2 planet gear teeth number [ea], > 0; stage-2 planets are placed on the stage-1 carrier radius and ring2 adapts to mesh with them |
+| Zs1 | Sun gear stage 1 teeth number [ea], > 0; defines gear ratio |
 | Shift factor, Gs1.X | Profile shift coefficient of stage-1 sun gear |
-| Shift factor, Gs2.X | Profile shift coefficient of stage-2 sun gear |
+| Shift factor, Gp1.X | Profile shift coefficient of stage-1 planet gear; together with Gs1.X it determines the carrier radius |
+| Shift factor, Gp2.X | Profile shift coefficient of stage-2 planet gear |
 | Backlash factor, B | Backlash adjustment |
 | Addendum factor, A | Addendum coefficient |
 | Dedendum factor, D | Dedendum coefficient |
@@ -88,6 +106,10 @@ Or use the platform launcher:
 | Plot option | Stage1 / Stage2 / Total |
 
 Press **Run** to compute and plot.
+
+The ring gear shift factors (Gr1.X, Gr2.X) are not inputs: they are computed automatically so that the ring teeth mesh with the planet teeth without flank clearance (zero backlash) at the carrier radius, taking the input shift factors (Gs1.X, Gp1.X, Gp2.X) into account. With backlash B = 0 there is no tooth gap for any shift combination; the B input adds flank clearance on top of this, as intended.
+
+Ring gear tooth counts (Zr1, Zr2) are determined in the zero-shift state: the layout is solved with standard pitch circles and each ring tooth count is rounded to the nearest integer, so the ring gears always have whole tooth numbers regardless of the shift factor inputs.
 
 ![](./img/PGS_02.png)
 

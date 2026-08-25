@@ -104,6 +104,7 @@ class GPG:
         self.plot_x: np.ndarray = np.empty(0)   # final positioned outline
         self.plot_y: np.ndarray = np.empty(0)
         # --- Reference circles ---
+        self.pitch_circle_radius: float | None = None  # drawn pitch radius override
         self.pitch_circle_x: np.ndarray = np.empty(0)
         self.pitch_circle_y: np.ndarray = np.empty(0)
         self.outer_circle_x: np.ndarray = np.empty(0)
@@ -316,7 +317,9 @@ class GPG:
 
     def _pitch_circle(self) -> None:
         theta = np.linspace(0, 2 * np.pi, self.seg_circle)
-        radius = self.module * (self.teeth + self.shift_factor) / 2
+        radius = (self.pitch_circle_radius
+                  if self.pitch_circle_radius is not None
+                  else self.module * (self.teeth / 2 + self.shift_factor))
         self.pitch_circle_x = radius * np.cos(theta) + self.x0
         self.pitch_circle_y = radius * np.sin(theta) + self.y0
 

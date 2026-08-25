@@ -20,6 +20,7 @@ from tkinter import ttk
 import matplotlib.pyplot as plt
 import numpy as np
 
+from CPG import CPG
 from GPG import GPG
 from PGS import PGS
 
@@ -49,34 +50,39 @@ PADY = 2
 
 # Default values inserted into the input entries at startup.
 DEFAULT_INPUTS = {
-    "TYPE": 1,
-    "m": 0.5,
+    "TYPE": 13,
+    "m1": 0.8,
+    "m2": 1.2,
     "Np": 3,
-    "Zr2overNp": 20,
-    "Zs1overNp": 7,
-    "Gs1X": 0.2,
-    "Gs2X": -0.05,
+    "Zp2": 20.0,
+    "Zs1": 12,
+    "Gs1X": 0.4,
+    "Gp1X": 0.4,
+    "Gp2X": 0.4,
     "B": 0.04,
     "A": 1.0,
     "D": 1.25,
     "alpha": 20,
     "C": 0.2,
-    "E": 0.1,
+    "E": 0.01,
     "PlotOption": 3,
+    "TeethType": "Involute Teeth",
 }
 
 # (key, label, hint, hint-on-next-row?)
 PLANETARY_INPUTS = [
     ("TYPE", "Type", "", False),
-    ("m", "Module, m", "[mm] > 0", False),
+    ("m1", "Module1, m1", "[mm] > 0", False),
+    ("m2", "Module2, m2", "[mm] > 0", False),
     ("Np", "Planets number, Np", "[ea] > 2", False),
-    ("Zr2overNp", "Zr2 / Np", "", False),
-    ("Zs1overNp", "Zs1 / Np", "", False),
+    ("Zp2", "Planet2 Teeth, Zp2", "[ea] > 0", False),
+    ("Zs1", "Sun1 Teeth, Zs1", "[ea] > 0", False),
 ]
 
 GEAR_INPUTS = [
     ("Gs1X", "Shift factor, Gs1.X", "", False),
-    ("Gs2X", "Shift factor, Gs2.X", "", False),
+    ("Gp1X", "Shift factor, Gp1.X", "", False),
+    ("Gp2X", "Shift factor, Gp2.X", "", False),
     ("B", "Backlash factor, B", "", False),
     ("A", "Addendum factor, A", "", False),
     ("D", "Dedendum factor, D", "", False),
@@ -94,6 +100,14 @@ PLOT_OPTIONS = [label for label, _ in PLOT_ITEMS]
 PLOT_LABEL_TO_CODE = {label: code for label, code in PLOT_ITEMS}
 PLOT_CODE_TO_LABEL = {code: label for label, code in PLOT_ITEMS}
 
+# Tooth profile selection: label -> generator class.
+TOOTH_ITEMS = [
+    ("Involute Teeth", GPG),
+    ("Cycloid Teeth", CPG),
+]
+TOOTH_OPTIONS = [label for label, _ in TOOTH_ITEMS]
+TOOTH_LABEL_TO_CLASS = dict(TOOTH_ITEMS)
+
 # Human-readable Type options paired with their integer gear-type codes.
 TYPE_ITEMS = [
     ("Simple", 0),
@@ -102,6 +116,22 @@ TYPE_ITEMS = [
     ("Wolfrom (diff=2)", 3),
     ("Wolfrom (diff=3)", 4),
     ("Wolfrom (diff=4)", 5),
+    ("Wolfrom (diff=5)", 6),
+    ("Wolfrom (diff=6)", 7),
+    ("Wolfrom (diff=7)", 8),
+    ("Wolfrom (diff=8)", 9),
+    ("Wolfrom (diff=9)", 10),
+    ("Wolfrom (diff=10)", 11),
+    ("Wolfrom (diff=11)", 12),
+    ("Wolfrom (diff=12)", 13),
+    ("Wolfrom (diff=13)", 14),
+    ("Wolfrom (diff=14)", 15),
+    ("Wolfrom (diff=15)", 16),
+    ("Wolfrom (diff=16)", 17),
+    ("Wolfrom (diff=17)", 18),
+    ("Wolfrom (diff=18)", 19),
+    ("Wolfrom (diff=19)", 20),
+    ("Wolfrom (diff=20)", 21),
 ]
 TYPE_LABELS = [label for label, _ in TYPE_ITEMS]
 TYPE_LABEL_TO_CODE = {label: code for label, code in TYPE_ITEMS}
@@ -112,7 +142,7 @@ app: tk.Tk
 entries: dict[str, tk.Widget] = {}
 textbox: tk.Text
 P1: PGS
-gears: dict[str, GPG]
+gears: dict[str, GPG | CPG]
 
 
 # ---------------------------------------------------------------- parameters
@@ -130,14 +160,24 @@ def copy_gear_factors(target_gears, module, b, a, d, angle, c, e):
 
 def read_parameters() -> None:
     """Pull values from the input entries into the model objects."""
+    global gears
+    # Rebuild the gear set when the tooth profile selection changes.
+    cls = TOOTH_LABEL_TO_CLASS[entries["TeethType"].get()]
+    if not isinstance(gears["Gs1"], cls):
+        gears = {name: cls() for name in GEAR_ORDER}
+
     P1.gear_type = TYPE_LABEL_TO_CODE[entries["TYPE"].get()]
-    P1.module = float(entries["m"].get())
+    P1.module1 = float(entries["m1"].get())
+    P1.module2 = float(entries["m2"].get())
     P1.num_planets = int(entries["Np"].get())
-    P1.zr2_multiple_np = int(entries["Zr2overNp"].get())
-    P1.zs1_multiple_np = int(entries["Zs1overNp"].get())
+    P1.zp2 = float(entries["Zp2"].get())
+    P1.zs1 = float(entries["Zs1"].get())
+    P1.shift_s1 = float(entries["Gs1X"].get())
+    P1.shift_p1 = float(entries["Gp1X"].get())
     P1.pressure_angle = float(entries["alpha"].get())
 
-    module = float(entries["m"].get())
+    module1 = float(entries["m1"].get())
+    module2 = float(entries["m2"].get())
     b = float(entries["B"].get())
     a = float(entries["A"].get())
     d = float(entries["D"].get())
@@ -146,13 +186,39 @@ def read_parameters() -> None:
     e = float(entries["E"].get())
 
     copy_gear_factors((gears["Gs1"], gears["Gp1"], gears["Gr1"]),
-                      module, b, a, d, angle, c, e)
+                      module1, b, a, d, angle, c, e)
     gears["Gs1"].shift_factor = float(entries["Gs1X"].get())
+    gears["Gp1"].shift_factor = float(entries["Gp1X"].get())
 
     if P1.is_wolfrom:
         copy_gear_factors((gears["Gs2"], gears["Gp2"], gears["Gr2"]),
-                          module, b, a, d, angle, c, e)
-        gears["Gs2"].shift_factor = float(entries["Gs2X"].get())
+                          module2, b, a, d, angle, c, e)
+        gears["Gp2"].shift_factor = float(entries["Gp2X"].get())
+
+
+def _ring_shift_factor(zp, xp, zr, module, dc, alpha_deg):
+    """Ring-gear profile shift for a zero-backlash internal mesh.
+
+    The planet (teeth ``zp``, shift ``xp``) meshes with the ring (``zr``
+    positive teeth) at the carrier radius ``dc``/2.  The operating
+    pressure angle of the mesh follows from the centre distance:
+
+        cos(a') = module * cos(a0) * (zr - zp) / dc
+
+    Matching the tooth thicknesses at the operating pitch point (the
+    planet tooth must exactly fill the ring tooth space) gives:
+
+        Xr = (zr - zp) * (inv(a0) - inv(a')) / (2 * tan(a0)) - xp
+
+    The backlash factor is deliberately left uncompensated so that the
+    B input keeps creating flank clearance as before.
+    """
+    a0 = np.deg2rad(alpha_deg)
+    cos_aw = np.clip(module * np.cos(a0) * (zr - zp) / dc, -1.0, 1.0)
+    aw = np.arccos(cos_aw)
+    inv_a0 = np.tan(a0) - a0
+    inv_aw = np.tan(aw) - aw
+    return (zr - zp) * (inv_a0 - inv_aw) / (2.0 * np.tan(a0)) - xp
 
 
 def finalize_parameters() -> None:
@@ -174,11 +240,20 @@ def finalize_parameters() -> None:
         gears["Gr2"].module = P1.module2
         gears["Gr2"].teeth = P1.zr2
 
-    gears["Gp1"].shift_factor = -gears["Gs1"].shift_factor
-    gears["Gr1"].shift_factor = gears["Gs1"].shift_factor
+    gears["Gr1"].shift_factor = _ring_shift_factor(
+        P1.zp1, gears["Gp1"].shift_factor, -P1.zr1,
+        P1.module1, P1.dc, gears["Gp1"].pressure_angle)
+    gears["Gr1"].pitch_circle_radius = (
+        P1.dc / 2.0
+        + P1.module1 * (P1.zp1 / 2.0 + gears["Gp1"].shift_factor))
     if P1.is_wolfrom:
-        gears["Gp2"].shift_factor = -gears["Gs2"].shift_factor
-        gears["Gr2"].shift_factor = gears["Gs2"].shift_factor
+        gears["Gs2"].shift_factor = -gears["Gp2"].shift_factor
+        gears["Gr2"].shift_factor = _ring_shift_factor(
+            P1.zp2, gears["Gp2"].shift_factor, -P1.zr2,
+            P1.module2, P1.dc, gears["Gp2"].pressure_angle)
+        gears["Gr2"].pitch_circle_radius = (
+            P1.dc / 2.0
+            + P1.module2 * (P1.zp2 / 2.0 + gears["Gp2"].shift_factor))
 
 
 def run_calc() -> None:
@@ -203,13 +278,14 @@ def rotate(x, y, angle):
 
 # --------------------------------------------------------------- plotting
 def _plot_stage(sun, planet, ring, *, color, pitch_style) -> None:
-    """Draw the sun, its array of planets and the ring for one stage."""
-    sun_angle = 0.0
-    if planet.teeth % 2 == 0:
-        sun_angle = (2 * np.pi / sun.teeth) / 2
-    sx, sy = rotate(sun.plot_x, sun.plot_y, sun_angle)
-    plt.plot(sx, sy, color)
-    plt.plot(sun.pitch_circle_x, sun.pitch_circle_y, pitch_style)
+    """Draw the sun (optional), its array of planets and the ring."""
+    if sun is not None:
+        sun_angle = 0.0
+        if planet.teeth % 2 == 0:
+            sun_angle = (2 * np.pi / sun.teeth) / 2
+        sx, sy = rotate(sun.plot_x, sun.plot_y, sun_angle)
+        plt.plot(sx, sy, color)
+        plt.plot(sun.pitch_circle_x, sun.pitch_circle_y, pitch_style)
 
     array_angle = 2 * np.pi / P1.num_planets
     for i in range(P1.num_planets):
@@ -232,8 +308,14 @@ def plot_pgs() -> None:
         _plot_stage(gears["Gs1"], gears["Gp1"], gears["Gr1"],
                     color="dimgray", pitch_style="r:")
     if option in (2, 3) and P1.is_wolfrom:
-        _plot_stage(gears["Gs2"], gears["Gp2"], gears["Gr2"],
+        _plot_stage(None, gears["Gp2"], gears["Gr2"],
                     color="black", pitch_style="r--")
+
+    # Carrier circle: the orbit of the planet gear centres.
+    theta = np.linspace(0, 2 * np.pi, 361)
+    carrier_radius = P1.dc / 2.0
+    plt.plot(carrier_radius * np.cos(theta), carrier_radius * np.sin(theta),
+             color="lightgray", linestyle="--", linewidth=1)
 
     plt.axis("equal")
     plt.grid(True)
@@ -269,13 +351,17 @@ def _append_checks(lines: list[str]) -> None:
 
 def _append_inputs(lines: list[str]) -> None:
     lines.append("## Input Parameters\n")
-    lines.append("* Type, TYPE = " + str(int(P1.gear_type)) + "\n")
-    lines.append("* Module, m = " + str(float(P1.module)) + "\n")
+    lines.append("* Type, TYPE = " + str(int(P1.gear_type)) + ", "
+                 + TYPE_CODE_TO_LABEL.get(int(P1.gear_type), "Unknown") + "\n")
+    lines.append("* Module1, m1 = " + str(float(P1.module1)) + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Module2, m2 = " + str(float(P1.module2)) + "\n")
     lines.append("* Planets Number, Np = " + str(int(P1.num_planets)) + "\n")
-    lines.append("* Zr2/Np = " + str(int(P1.zr2_multiple_np)) + "\n")
-    lines.append("* Zs1/Np = " + str(int(P1.zs1_multiple_np)) + "\n")
+    lines.append("* Planet2 Teeth, Zp2 = " + str(P1.zp2) + "\n")
+    lines.append("* Sun1 Teeth, Zs1 = " + str(int(P1.zs1)) + "\n")
     lines.append("* Shift Factor, Gs1.X = " + str(float(gears["Gs1"].shift_factor)) + "\n")
-    lines.append("* Shift Factor, Gs2.X = " + str(float(gears["Gs2"].shift_factor)) + "\n")
+    lines.append("* Shift Factor, Gp1.X = " + str(float(gears["Gp1"].shift_factor)) + "\n")
+    lines.append("* Shift Factor, Gp2.X = " + str(float(gears["Gp2"].shift_factor)) + "\n")
     lines.append("* Backlash Factor, B = " + str(float(gears["Gs1"].backlash_factor)) + "\n")
     lines.append("* Addendum Factor, A = " + str(float(gears["Gs1"].addendum_factor)) + "\n")
     lines.append("* Dedendum Factor, D = " + str(float(gears["Gs1"].dedendum_factor)) + "\n")
@@ -415,8 +501,9 @@ def toggle_simple_fields() -> None:
     """Disable Wolfrom-only fields when the Simple Type is selected."""
     is_simple = entries["TYPE"].get() == "Simple"
     state = "disabled" if is_simple else "normal"
-    entries["Zr2overNp"].configure(state=state)
-    entries["Gs2X"].configure(state=state)
+    entries["Zp2"].configure(state=state)
+    entries["m2"].configure(state=state)
+    entries["Gp2X"].configure(state=state)
 
 
 def button_run_callback() -> None:
@@ -610,6 +697,12 @@ def build_gui() -> None:
     cb = ttk.Combobox(lf_plot, values=PLOT_OPTIONS, width=12, state="readonly")
     cb.grid(row=0, column=1, padx=PADX, pady=PADY, sticky="w")
     entries["PlotOption"] = cb
+    ttk.Label(lf_plot, text="Teeth profile", style="Card.TLabel").grid(
+        row=1, column=0, padx=(0, PADX), pady=PADY, sticky="e")
+    cb_teeth = ttk.Combobox(lf_plot, values=TOOTH_OPTIONS, width=12,
+                            state="readonly")
+    cb_teeth.grid(row=1, column=1, padx=PADX, pady=PADY, sticky="w")
+    entries["TeethType"] = cb_teeth
 
     # --- right column : result -------------------------------------------
     right = ttk.Frame(main, style="App.TFrame")
