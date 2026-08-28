@@ -50,7 +50,7 @@ PADY = 2
 
 # Default values inserted into the input entries at startup.
 DEFAULT_INPUTS = {
-    "TYPE": 13,
+    "TYPE": 1,
     "m1": 0.8,
     "m2": 1.2,
     "Np": 3,
@@ -68,11 +68,13 @@ DEFAULT_INPUTS = {
     "E": 0.01,
     "PlotOption": 3,
     "TeethType": "Involute Teeth",
+    "DIFF": 12.0,
 }
 
 # (key, label, hint, hint-on-next-row?)
 PLANETARY_INPUTS = [
     ("TYPE", "Type", "", False),
+    ("DIFF", "Teeth difference, diff", "Wolfrom only", True),
     ("m1", "Module1, m1", "[mm] > 0", False),
     ("m2", "Module2, m2", "[mm] > 0", False),
     ("Np", "Planets number, Np", "[ea] > 2", False),
@@ -117,30 +119,11 @@ TOOTH_ALL_LABEL = "All"
 TOOTH_OPTIONS = [label for label, _ in TOOTH_ITEMS] + [TOOTH_ALL_LABEL]
 TOOTH_LABEL_TO_CLASS = dict(TOOTH_ITEMS)
 
-# Human-readable Type options paired with their integer gear-type codes.
+# Human-readable Type options: a free teeth-difference is entered manually
+# for the Wolfrom type, so only these two top-level choices remain.
 TYPE_ITEMS = [
     ("Simple", 0),
-    ("Wolfrom (diff=0.5)", 2),
-    ("Wolfrom (diff=1)", 1),
-    ("Wolfrom (diff=2)", 3),
-    ("Wolfrom (diff=3)", 4),
-    ("Wolfrom (diff=4)", 5),
-    ("Wolfrom (diff=5)", 6),
-    ("Wolfrom (diff=6)", 7),
-    ("Wolfrom (diff=7)", 8),
-    ("Wolfrom (diff=8)", 9),
-    ("Wolfrom (diff=9)", 10),
-    ("Wolfrom (diff=10)", 11),
-    ("Wolfrom (diff=11)", 12),
-    ("Wolfrom (diff=12)", 13),
-    ("Wolfrom (diff=13)", 14),
-    ("Wolfrom (diff=14)", 15),
-    ("Wolfrom (diff=15)", 16),
-    ("Wolfrom (diff=16)", 17),
-    ("Wolfrom (diff=17)", 18),
-    ("Wolfrom (diff=18)", 19),
-    ("Wolfrom (diff=19)", 20),
-    ("Wolfrom (diff=20)", 21),
+    ("3K-Wolfrom", 1),
 ]
 TYPE_LABELS = [label for label, _ in TYPE_ITEMS]
 TYPE_LABEL_TO_CODE = {label: code for label, code in TYPE_ITEMS}
@@ -185,7 +168,9 @@ def read_parameters() -> None:
             gears = {name: cls() for name in GEAR_ORDER}
         gears_second = None
 
-    P1.gear_type = TYPE_LABEL_TO_CODE[entries["TYPE"].get()]
+    is_wolfrom = entries["TYPE"].get() != "Simple"
+    P1.gear_type = 1 if is_wolfrom else 0
+    P1.type_diff = float(entries["DIFF"].get()) if is_wolfrom else 1.0
     P1.module1 = float(entries["m1"].get())
     P1.module2 = float(entries["m2"].get())
     P1.num_planets = int(entries["Np"].get())
@@ -409,8 +394,11 @@ def _append_checks(lines: list[str]) -> None:
 
 def _append_inputs(lines: list[str]) -> None:
     lines.append("## Input Parameters\n")
+    type_label = TYPE_CODE_TO_LABEL.get(int(P1.gear_type), "Unknown")
+    if P1.is_wolfrom:
+        type_label += " (diff=" + str(P1.type_diff) + ")"
     lines.append("* Type, TYPE = " + str(int(P1.gear_type)) + ", "
-                 + TYPE_CODE_TO_LABEL.get(int(P1.gear_type), "Unknown") + "\n")
+                 + type_label + "\n")
     lines.append("* Module1, m1 = " + str(float(P1.module1)) + "\n")
     if P1.is_wolfrom:
         lines.append("* Module2, m2 = " + str(float(P1.module2)) + "\n")
@@ -596,6 +584,12 @@ def toggle_simple_fields() -> None:
     entries["m2"].configure(state=state)
     entries["Gp2X"].configure(state=state)
     entries["Ns1"].configure(state=state)
+    if is_simple:
+        entries["DIFF"].grid_remove()
+        entries["DIFF_HINT"].grid_remove()
+    else:
+        entries["DIFF"].grid()
+        entries["DIFF_HINT"].grid()
 
 
 def button_run_callback() -> None:
@@ -695,9 +689,11 @@ def _build_field(parent, row, key, label_text, hint_text, hint_below) -> int:
         entry.bind("<<ComboboxSelected>>", lambda _e: toggle_simple_fields())
     if hint_text:
         if hint_below:
-            ttk.Label(parent, text=hint_text, style="CardMuted.TLabel").grid(
-                row=row + 1, column=0, columnspan=2, padx=PADX,
-                pady=(0, PADY), sticky="w")
+            hint = ttk.Label(parent, text=hint_text, style="CardMuted.TLabel")
+            hint.grid(row=row + 1, column=0, columnspan=2, padx=PADX,
+                      pady=(0, PADY), sticky="w")
+            if key == "DIFF":
+                entries["DIFF_HINT"] = hint
             return row + 2
         ttk.Label(parent, text=hint_text, style="CardMuted.TLabel").grid(
             row=row, column=2, padx=PADX, pady=PADY, sticky="w")

@@ -39,31 +39,6 @@ STANDARD_PRESSURE_ANGLE: float = 20.0
 MIN_RIM_FOR_TRIMMING: float = 16.0
 ROUND_PRECISION: int = 6
 
-# Teeth-difference lookup keyed by gear type code.
-_TYPE_DIFFERENCE: dict[int, float] = {
-    0: 1.0,
-    1: 1.0,
-    2: 0.5,
-    3: 2.0,
-    4: 3.0,
-    5: 4.0,
-    6: 5.0,
-    7: 6.0,
-    8: 7.0,
-    9: 8.0,
-    10: 9.0,
-    11: 10.0,
-    12: 11.0,
-    13: 12.0,
-    14: 13.0,
-    15: 14.0,
-    16: 15.0,
-    17: 16.0,
-    18: 17.0,
-    19: 18.0,
-    20: 19.0,
-    21: 20.0,
-}
 
 
 @dataclass
@@ -154,7 +129,8 @@ class PGS:
     # ------------------------------------------------------------------ calc
     def calc(self) -> None:
         """Compute derived teeth counts, diameters and ratios."""
-        self.type_diff = _TYPE_DIFFERENCE.get(self.gear_type, 1.0)
+        # type_diff is supplied directly via the UI ("diff" field) for the
+        # Wolfrom type; for the Simple type it stays at its 1.0 default.
 
         # Ring tooth counts are decided in the zero-shift state: solve the
         # layout with standard pitch circles (no shift factors) and round
@@ -350,7 +326,8 @@ class PGS:
 
     def _check_equal_distance(self) -> None:
         modulus = (self.num_planets * self.type_diff
-                   if self.gear_type == 2 else self.num_planets)
+                   if self.is_wolfrom and self.type_diff != int(self.type_diff)
+                   else self.num_planets)
         cond = (self.zs1 - self.zr1) % modulus == 0
         self.checks.equal_distance_1 = self._label(cond, "OK", "Fail")
         self._emit("Planet Numbers (Equal Distance Condition) 1",

@@ -53,9 +53,7 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 | Type 코드 | 의미 | 치수 차(difference, $k$) |
 |-----------|------|--------------------------|
 | 0 | Simple (단순 단단) | — |
-| 1 | Wolfrom (diff=1) | $k=1$ |
-| 2 | Wolfrom (diff=0.5) | $k=0.5$ |
-| 3 ~ 21 | Wolfrom (diff=2 … 20) | $k=2 \ldots 20$ |
+| 1 | 3K-Wolfrom | $k$ 는 `diff` 입력란에 자유롭게 기입 |
 
 여기서 $k$는 두 링기어 치수 차 $\big||Z_{r1}| - |Z_{r2}|\big| = k \cdot N_p$ 에 들어가는 계수이다.
 
@@ -74,9 +72,10 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 
 3K 감속비는 근사적으로 $i_{3K} \approx \dfrac{Z_{r1}/Z_{s1}}{1 - \dfrac{Z_{r1} Z_{p2}}{Z_{r2} Z_{p1}}}$ 형태이며, 두 링기어의 치수 차가 클수록($k$ 증가) 감속비가 커진다.
 
-- **Type 콤보박스**에서 `Wolfrom (diff=1)` ~ `Wolfrom (diff=20)` 중 선택한다.
+- **Type 콤보박스**에서 `Simple` 또는 `3K-Wolfrom` 중 선택한다.
+- `3K-Wolfrom`을 선택하면 바로 아래에 `diff` 텍스트 입력란이 나타나며, 여기에 치수 차 $k$를 자유롭게 기입한다.
 - 큰 감속비가 필요하면 큰 $k$, 소형·저감속이면 작은 $k$를 고른다.
-- GUI 기본값은 `Wolfrom (diff=12)` (예제 결과 감속비 58.5 = 117/2)이다.
+- GUI 기본값은 `3K-Wolfrom` / `diff = 12.0` 이다.
 
 ### 2.3 Step 2 — 독립 설계 변수 입력 ("Planetary System" 카드)
 
@@ -591,7 +590,7 @@ flowchart LR
 flowchart LR
     subgraph COL1["열Ⅰ. 치수 배치"]
         direction TB
-        A["① calc 시작"] --> B["② type_diff = k<br/>Type 코드에 따른<br/>치수차 lookup"]
+        A["① calc 시작"] --> B["② type_diff = k<br/>diff 입력란에서<br/>직접 할당"]
         B --> C["③ 무전위 레이아웃 방정식<br/>분자 = m1·Zs1/2 + m2·(Zp2 + k·Np)<br/>분모 = m2 − m1/2<br/>Zr1* = 분자/분모 · Zr2* = Zr1* − k·Np<br/>반올림 → Zr1, Zr2 정수 확정"]
         C --> D["④ Zp1 = (−Zr1 − Zs1)/2<br/>피치직경 ds1, dp1, dr1<br/>dc = ds1 + dp1 + 2·m1·(xs1 + xp1)"]
     end

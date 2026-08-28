@@ -11,27 +11,7 @@ and provides a ttk-based graphical interface.
 | Type | Code | Description |
 |------|------|-------------|
 | Simple | 0 | Standard single-stage planetary set |
-| Wolfrom (diff=1) | 1 | Wolfrom set, teeth difference = 1 |
-| Wolfrom (diff=0.5) | 2 | Wolfrom set, teeth difference = 0.5 |
-| Wolfrom (diff=2) | 3 | Wolfrom set, teeth difference = 2 |
-| Wolfrom (diff=3) | 4 | Wolfrom set, teeth difference = 3 |
-| Wolfrom (diff=4) | 5 | Wolfrom set, teeth difference = 4 |
-| Wolfrom (diff=5) | 6 | Wolfrom set, teeth difference = 5 |
-| Wolfrom (diff=6) | 7 | Wolfrom set, teeth difference = 6 |
-| Wolfrom (diff=7) | 8 | Wolfrom set, teeth difference = 7 |
-| Wolfrom (diff=8) | 9 | Wolfrom set, teeth difference = 8 |
-| Wolfrom (diff=9) | 10 | Wolfrom set, teeth difference = 9 |
-| Wolfrom (diff=10) | 11 | Wolfrom set, teeth difference = 10 |
-| Wolfrom (diff=11) | 12 | Wolfrom set, teeth difference = 11 |
-| Wolfrom (diff=12) | 13 | Wolfrom set, teeth difference = 12 |
-| Wolfrom (diff=13) | 14 | Wolfrom set, teeth difference = 13 |
-| Wolfrom (diff=14) | 15 | Wolfrom set, teeth difference = 14 |
-| Wolfrom (diff=15) | 16 | Wolfrom set, teeth difference = 15 |
-| Wolfrom (diff=16) | 17 | Wolfrom set, teeth difference = 16 |
-| Wolfrom (diff=17) | 18 | Wolfrom set, teeth difference = 17 |
-| Wolfrom (diff=18) | 19 | Wolfrom set, teeth difference = 18 |
-| Wolfrom (diff=19) | 20 | Wolfrom set, teeth difference = 19 |
-| Wolfrom (diff=20) | 21 | Wolfrom set, teeth difference = 20 |
+| 3K-Wolfrom | 1 | Wolfrom set; the teeth difference is entered freely in the `diff` field shown below the Type combo box |
 
 ## Gear Set Architecture
 
