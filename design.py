@@ -56,6 +56,7 @@ DEFAULT_INPUTS = {
     "Np": 3,
     "Zp2": 20.0,
     "Zs1": 12,
+    "Ns1": 1000.0,
     "Gs1X": 0.4,
     "Gp1X": 0.4,
     "Gp2X": 0.4,
@@ -77,6 +78,7 @@ PLANETARY_INPUTS = [
     ("Np", "Planets number, Np", "[ea] > 2", False),
     ("Zp2", "Planet2 Teeth, Zp2", "[ea] > 0", False),
     ("Zs1", "Sun1 Teeth, Zs1", "[ea] > 0", False),
+    ("Ns1", "Input speed, ns1", "[rpm]", False),
 ]
 
 GEAR_INPUTS = [
@@ -92,6 +94,11 @@ GEAR_INPUTS = [
 ]
 
 PLOT_ITEMS = [
+    ("Gs1", 11),
+    ("Gp1", 12),
+    ("Gr1", 13),
+    ("Gp2", 22),
+    ("Gr2", 23),
     ("Stage1", 1),
     ("Stage2", 2),
     ("Total", 3),
@@ -105,7 +112,9 @@ TOOTH_ITEMS = [
     ("Involute Teeth", GPG),
     ("Cycloid Teeth", CPG),
 ]
-TOOTH_OPTIONS = [label for label, _ in TOOTH_ITEMS]
+# "All" overlays both profiles in a single plot.
+TOOTH_ALL_LABEL = "All"
+TOOTH_OPTIONS = [label for label, _ in TOOTH_ITEMS] + [TOOTH_ALL_LABEL]
 TOOTH_LABEL_TO_CLASS = dict(TOOTH_ITEMS)
 
 # Human-readable Type options paired with their integer gear-type codes.
@@ -143,6 +152,7 @@ entries: dict[str, tk.Widget] = {}
 textbox: tk.Text
 P1: PGS
 gears: dict[str, GPG | CPG]
+gears_second: dict[str, GPG | CPG] | None = None
 
 
 # ---------------------------------------------------------------- parameters
@@ -160,11 +170,20 @@ def copy_gear_factors(target_gears, module, b, a, d, angle, c, e):
 
 def read_parameters() -> None:
     """Pull values from the input entries into the model objects."""
-    global gears
-    # Rebuild the gear set when the tooth profile selection changes.
-    cls = TOOTH_LABEL_TO_CLASS[entries["TeethType"].get()]
-    if not isinstance(gears["Gs1"], cls):
-        gears = {name: cls() for name in GEAR_ORDER}
+    global gears, gears_second
+    # Rebuild the gear set when the tooth profile selection changes.  "All"
+    # builds both profiles (involute primary, cycloid overlay).
+    sel = entries["TeethType"].get()
+    if sel == TOOTH_ALL_LABEL:
+        if not isinstance(gears.get("Gs1"), GPG):
+            gears = {name: GPG() for name in GEAR_ORDER}
+        if gears_second is None or not isinstance(gears_second.get("Gs1"), CPG):
+            gears_second = {name: CPG() for name in GEAR_ORDER}
+    else:
+        cls = TOOTH_LABEL_TO_CLASS[sel]
+        if not isinstance(gears.get("Gs1"), cls):
+            gears = {name: cls() for name in GEAR_ORDER}
+        gears_second = None
 
     P1.gear_type = TYPE_LABEL_TO_CODE[entries["TYPE"].get()]
     P1.module1 = float(entries["m1"].get())
@@ -172,6 +191,7 @@ def read_parameters() -> None:
     P1.num_planets = int(entries["Np"].get())
     P1.zp2 = float(entries["Zp2"].get())
     P1.zs1 = float(entries["Zs1"].get())
+    P1.ns1 = float(entries["Ns1"].get())
     P1.shift_s1 = float(entries["Gs1X"].get())
     P1.shift_p1 = float(entries["Gp1X"].get())
     P1.pressure_angle = float(entries["alpha"].get())
@@ -185,15 +205,16 @@ def read_parameters() -> None:
     c = float(entries["C"].get())
     e = float(entries["E"].get())
 
-    copy_gear_factors((gears["Gs1"], gears["Gp1"], gears["Gr1"]),
-                      module1, b, a, d, angle, c, e)
-    gears["Gs1"].shift_factor = float(entries["Gs1X"].get())
-    gears["Gp1"].shift_factor = float(entries["Gp1X"].get())
+    for g in [gears] + ([gears_second] if gears_second else []):
+        copy_gear_factors((g["Gs1"], g["Gp1"], g["Gr1"]),
+                          module1, b, a, d, angle, c, e)
+        g["Gs1"].shift_factor = float(entries["Gs1X"].get())
+        g["Gp1"].shift_factor = float(entries["Gp1X"].get())
 
-    if P1.is_wolfrom:
-        copy_gear_factors((gears["Gs2"], gears["Gp2"], gears["Gr2"]),
-                          module2, b, a, d, angle, c, e)
-        gears["Gp2"].shift_factor = float(entries["Gp2X"].get())
+        if P1.is_wolfrom:
+            copy_gear_factors((g["Gs2"], g["Gp2"], g["Gr2"]),
+                              module2, b, a, d, angle, c, e)
+            g["Gp2"].shift_factor = float(entries["Gp2X"].get())
 
 
 def _ring_shift_factor(zp, xp, zr, module, dc, alpha_deg):
@@ -221,39 +242,39 @@ def _ring_shift_factor(zp, xp, zr, module, dc, alpha_deg):
     return (zr - zp) * (inv_a0 - inv_aw) / (2.0 * np.tan(a0)) - xp
 
 
-def finalize_parameters() -> None:
-    """Transfer the PGS-derived tooth counts/modules to the GPG gears."""
-    gears["Gs1"].module = P1.module1
-    gears["Gs1"].teeth = P1.zs1
-    gears["Gp1"].module = P1.module1
-    gears["Gp1"].teeth = P1.zp1
-    gears["Gp1"].y0 = P1.dc / 2.0
-    gears["Gr1"].module = P1.module1
-    gears["Gr1"].teeth = P1.zr1
+def finalize_parameters(g: dict[str, GPG | CPG]) -> None:
+    """Transfer the PGS-derived tooth counts/modules to a gear set ``g``."""
+    g["Gs1"].module = P1.module1
+    g["Gs1"].teeth = P1.zs1
+    g["Gp1"].module = P1.module1
+    g["Gp1"].teeth = P1.zp1
+    g["Gp1"].y0 = P1.dc / 2.0
+    g["Gr1"].module = P1.module1
+    g["Gr1"].teeth = P1.zr1
 
     if P1.is_wolfrom:
-        gears["Gs2"].module = P1.module2
-        gears["Gs2"].teeth = P1.zs2
-        gears["Gp2"].module = P1.module2
-        gears["Gp2"].teeth = P1.zp2
-        gears["Gp2"].y0 = P1.dc / 2.0
-        gears["Gr2"].module = P1.module2
-        gears["Gr2"].teeth = P1.zr2
+        g["Gs2"].module = P1.module2
+        g["Gs2"].teeth = P1.zs2
+        g["Gp2"].module = P1.module2
+        g["Gp2"].teeth = P1.zp2
+        g["Gp2"].y0 = P1.dc / 2.0
+        g["Gr2"].module = P1.module2
+        g["Gr2"].teeth = P1.zr2
 
-    gears["Gr1"].shift_factor = _ring_shift_factor(
-        P1.zp1, gears["Gp1"].shift_factor, -P1.zr1,
-        P1.module1, P1.dc, gears["Gp1"].pressure_angle)
-    gears["Gr1"].pitch_circle_radius = (
+    g["Gr1"].shift_factor = _ring_shift_factor(
+        P1.zp1, g["Gp1"].shift_factor, -P1.zr1,
+        P1.module1, P1.dc, g["Gp1"].pressure_angle)
+    g["Gr1"].pitch_circle_radius = (
         P1.dc / 2.0
-        + P1.module1 * (P1.zp1 / 2.0 + gears["Gp1"].shift_factor))
+        + P1.module1 * (P1.zp1 / 2.0 + g["Gp1"].shift_factor))
     if P1.is_wolfrom:
-        gears["Gs2"].shift_factor = -gears["Gp2"].shift_factor
-        gears["Gr2"].shift_factor = _ring_shift_factor(
-            P1.zp2, gears["Gp2"].shift_factor, -P1.zr2,
-            P1.module2, P1.dc, gears["Gp2"].pressure_angle)
-        gears["Gr2"].pitch_circle_radius = (
+        g["Gs2"].shift_factor = -g["Gp2"].shift_factor
+        g["Gr2"].shift_factor = _ring_shift_factor(
+            P1.zp2, g["Gp2"].shift_factor, -P1.zr2,
+            P1.module2, P1.dc, g["Gp2"].pressure_angle)
+        g["Gr2"].pitch_circle_radius = (
             P1.dc / 2.0
-            + P1.module2 * (P1.zp2 / 2.0 + gears["Gp2"].shift_factor))
+            + P1.module2 * (P1.zp2 / 2.0 + g["Gp2"].shift_factor))
 
 
 def run_calc() -> None:
@@ -261,12 +282,20 @@ def run_calc() -> None:
     P1.calc()
     P1.output()
     P1.checks_run()
-    finalize_parameters()
+    finalize_parameters(gears)
+    if gears_second is not None:
+        finalize_parameters(gears_second)
     for name in GEAR_ORDER[:3]:
         gears[name].calc()
     if P1.is_wolfrom:
         for name in GEAR_ORDER[3:]:
             gears[name].calc()
+    if gears_second is not None:
+        for name in GEAR_ORDER[:3]:
+            gears_second[name].calc()
+        if P1.is_wolfrom:
+            for name in GEAR_ORDER[3:]:
+                gears_second[name].calc()
 
 
 # --------------------------------------------------------------- helpers
@@ -277,25 +306,37 @@ def rotate(x, y, angle):
 
 
 # --------------------------------------------------------------- plotting
-def _plot_stage(sun, planet, ring, *, color, pitch_style) -> None:
-    """Draw the sun (optional), its array of planets and the ring."""
-    if sun is not None:
-        sun_angle = 0.0
-        if planet.teeth % 2 == 0:
-            sun_angle = (2 * np.pi / sun.teeth) / 2
-        sx, sy = rotate(sun.plot_x, sun.plot_y, sun_angle)
+# Plot-option codes: 1/2/3 = whole Stage1 / Stage2 / Total; 11-13 and
+# 22-23 = the individual gears Gs1, Gp1, Gr1, Gp2, Gr2.
+_PLOT_CODE_KEYS = {
+    1:  ["Gs1", "Gp1", "Gr1"],
+    2:  ["Gp2", "Gr2"],
+    3:  ["Gs1", "Gp1", "Gr1", "Gp2", "Gr2"],
+    11: ["Gs1"],
+    12: ["Gp1"],
+    13: ["Gr1"],
+    22: ["Gp2"],
+    23: ["Gr2"],
+}
+
+
+def _plot_gear(key: str, g: dict, *, color, pitch_style, sun_angle: float) -> None:
+    """Draw a single gear ``key`` from the gear set ``g``."""
+    gear = g[key]
+    if key == "Gs1":
+        sx, sy = rotate(gear.plot_x, gear.plot_y, sun_angle)
         plt.plot(sx, sy, color)
-        plt.plot(sun.pitch_circle_x, sun.pitch_circle_y, pitch_style)
-
-    array_angle = 2 * np.pi / P1.num_planets
-    for i in range(P1.num_planets):
-        px, py = rotate(planet.plot_x, planet.plot_y, array_angle * i)
-        ppx, ppy = rotate(planet.pitch_circle_x, planet.pitch_circle_y, array_angle * i)
-        plt.plot(px, py, color)
-        plt.plot(ppx, ppy, pitch_style)
-
-    plt.plot(ring.plot_x, ring.plot_y, color)
-    plt.plot(ring.pitch_circle_x, ring.pitch_circle_y, pitch_style)
+        plt.plot(gear.pitch_circle_x, gear.pitch_circle_y, pitch_style)
+    elif key.startswith("Gp"):
+        array_angle = 2 * np.pi / P1.num_planets
+        for i in range(P1.num_planets):
+            px, py = rotate(gear.plot_x, gear.plot_y, array_angle * i)
+            ppx, ppy = rotate(gear.pitch_circle_x, gear.pitch_circle_y, array_angle * i)
+            plt.plot(px, py, color)
+            plt.plot(ppx, ppy, pitch_style)
+    else:  # ring
+        plt.plot(gear.plot_x, gear.plot_y, color)
+        plt.plot(gear.pitch_circle_x, gear.pitch_circle_y, pitch_style)
 
 
 def plot_pgs() -> None:
@@ -303,13 +344,26 @@ def plot_pgs() -> None:
     plt.figure("PGS", figsize=(6, 6))
     plt.clf()
     option = PLOT_LABEL_TO_CODE[entries["PlotOption"].get()]
+    keys = _PLOT_CODE_KEYS.get(option, _PLOT_CODE_KEYS[3])
 
-    if option in (1, 3):
-        _plot_stage(gears["Gs1"], gears["Gp1"], gears["Gr1"],
-                    color="dimgray", pitch_style="r:")
-    if option in (2, 3) and P1.is_wolfrom:
-        _plot_stage(None, gears["Gp2"], gears["Gr2"],
-                    color="black", pitch_style="r--")
+    # Cycloid (CPG) teeth use the brand colours; involute (GPG) keeps the
+    # original grey / black scheme.  "All" overlays both profiles.
+    def plot_set(g, is_cyc):
+        color1 = "#95c4ed" if is_cyc else "dimgray"
+        color2 = "#19609d" if is_cyc else "black"
+        # Sun rotation that keeps the sun teeth meshing with the planet array.
+        sun_angle = 0.0
+        if g["Gp1"].teeth % 2 == 0:
+            sun_angle = (2 * np.pi / g["Gs1"].teeth) / 2
+        for key in keys:
+            color = color1 if key in ("Gs1", "Gp1", "Gr1") else color2
+            pitch_style = "r:" if key in ("Gs1", "Gp1", "Gr1") else "r--"
+            _plot_gear(key, g, color=color, pitch_style=pitch_style,
+                       sun_angle=sun_angle)
+
+    plot_set(gears, isinstance(gears.get("Gp1"), CPG))
+    if gears_second is not None:
+        plot_set(gears_second, isinstance(gears_second.get("Gp1"), CPG))
 
     # Carrier circle: the orbit of the planet gear centres.
     theta = np.linspace(0, 2 * np.pi, 361)
@@ -319,7 +373,11 @@ def plot_pgs() -> None:
 
     plt.axis("equal")
     plt.grid(True)
-    out_name = {1: "/PGS1.png", 2: "/PGS2.png", 3: "/PGS.png"}[option]
+    out_name = {
+        1: "/PGS1.png", 2: "/PGS2.png", 3: "/PGS.png",
+        11: "/Gs1.png", 12: "/Gp1.png", 13: "/Gr1.png",
+        22: "/Gp2.png", 23: "/Gr2.png",
+    }[option]
     plt.savefig(RESULT_DIR + out_name, dpi=PLOT_DPI)
     plt.show()
 
@@ -359,6 +417,8 @@ def _append_inputs(lines: list[str]) -> None:
     lines.append("* Planets Number, Np = " + str(int(P1.num_planets)) + "\n")
     lines.append("* Planet2 Teeth, Zp2 = " + str(P1.zp2) + "\n")
     lines.append("* Sun1 Teeth, Zs1 = " + str(int(P1.zs1)) + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Input Speed, ns1 = " + str(float(P1.ns1)) + "\n")
     lines.append("* Shift Factor, Gs1.X = " + str(float(gears["Gs1"].shift_factor)) + "\n")
     lines.append("* Shift Factor, Gp1.X = " + str(float(gears["Gp1"].shift_factor)) + "\n")
     lines.append("* Shift Factor, Gp2.X = " + str(float(gears["Gp2"].shift_factor)) + "\n")
@@ -368,6 +428,15 @@ def _append_inputs(lines: list[str]) -> None:
     lines.append("* Pressure Angle, alpha = " + str(float(gears["Gs1"].pressure_angle)) + "\n")
     lines.append("* Radius of Hib End, C = " + str(float(gears["Gs1"].hob_tip_radius_factor)) + "\n")
     lines.append("* Radius of Tooth End, E = " + str(float(gears["Gs1"].tooth_tip_radius_factor)) + "\n\n")
+
+
+def _speed_lines(title: str, rows: list[tuple[str, float]]) -> str:
+    """Compose one '### Speed (...)' Markdown block for a lockup config."""
+    body = [title + "\n"]
+    for label, value in rows:
+        body.append("* " + label + " = " + PGS._signed(value) + " [rpm]\n")
+    body.append("\n")
+    return "".join(body)
 
 
 def _append_wolfrom(lines: list[str]) -> None:
@@ -387,6 +456,28 @@ def _append_wolfrom(lines: list[str]) -> None:
     lines.append("* Ratio Total (Carrier Fixed, Ring2 Output) = " + str(P1.g2) + "\n")
     lines.append("* Ratio Total (Type-3K : Carrier Free, Ring2 Output) = "
                 + str(P1.g22) + " = " + fraction + "\n\n")
+    lines.append("* Direction, sign = + / - : co-rotating / counter-rotating relative to Gs1\n")
+    lines.append(_speed_lines(
+        "### Speed (Type-3K : Carrier Free, Ring2 Output)",
+        [("Input Gear Speed (Gs1)", P1.ns1),
+         ("Carrier Speed", P1.n_carrier),
+         ("1st Ring Gear Speed (Gr1)", P1.n_ring1),
+         ("Planet Gear Speed (Gp1,Gp2)", P1.n_planet),
+         ("2nd Ring Gear Speed (Gr2)", P1.n_output)]))
+    lines.append(_speed_lines(
+        "### Speed (Ring2 Fiexed, Carrier Output)",
+        [("Input Gear Speed (Gs1)", P1.ns1),
+         ("Carrier Speed", P1.n_g1_carrier),
+         ("1st Ring Gear Speed (Gr1)", P1.n_g1_ring1),
+         ("Planet Gear Speed (Gp1,Gp2)", P1.n_g1_planet),
+         ("2nd Ring Gear Speed (Gr2)", 0.0)]))
+    lines.append(_speed_lines(
+        "### Speed (Carrier Fixed, Ring2 Output)",
+        [("Input Gear Speed (Gs1)", P1.ns1),
+         ("Carrier Speed", 0.0),
+         ("1st Ring Gear Speed (Gr1)", P1.n_g2_ring1),
+         ("Planet Gear Speed (Gp1,Gp2)", P1.n_g2_planet),
+         ("2nd Ring Gear Speed (Gr2)", P1.n_g2_ring2)]))
     lines.append("### Size\n")
     lines.append("* Sun1 = " + str(P1.ds1) + " [mm],  " + str(P1.zs1) + " [ea]\n")
     lines.append("* Planet1 = " + str(P1.dp1) + " [mm],  " + str(P1.zp1) + " [ea]\n")
@@ -504,6 +595,7 @@ def toggle_simple_fields() -> None:
     entries["Zp2"].configure(state=state)
     entries["m2"].configure(state=state)
     entries["Gp2X"].configure(state=state)
+    entries["Ns1"].configure(state=state)
 
 
 def button_run_callback() -> None:

@@ -103,6 +103,7 @@ class PGS:
         self.zs1: float = 16.0
         self.shift_s1: float = 0.0
         self.shift_p1: float = 0.0
+        self.ns1: float = 1000.0
         # --- Derived constants ---
         self.type_diff: float = 1.0
         # --- Stage-1 teeth & diameters ---
@@ -125,6 +126,20 @@ class PGS:
         self.g22: float = 0.0
         self.l1: float = 0.0
         self.l2: float = 0.0
+        # --- Wolfrom operating speeds [rpm] (Ring1 fixed, Type-3K) ---
+        self.n_carrier: float = 0.0
+        self.n_ring1: float = 0.0
+        self.n_planet: float = 0.0
+        self.n_output: float = 0.0
+        # --- Operating speeds of the other two lockup configurations ---
+        # Ring2 fixed, carrier output (ratio g1):
+        self.n_g1_carrier: float = 0.0
+        self.n_g1_ring1: float = 0.0
+        self.n_g1_planet: float = 0.0
+        # Carrier fixed, ring2 output (ratio g2):
+        self.n_g2_planet: float = 0.0
+        self.n_g2_ring1: float = 0.0
+        self.n_g2_ring2: float = 0.0
         # --- Simple-only ratios ---
         self.g3: float = 0.0
         self.g4: float = 0.0
@@ -193,6 +208,45 @@ class PGS:
         if self.l2 > 1:
             self.g22 = -self.g22
 
+        # Operating speeds [rpm] for the Type-3K assembly (Ring1 fixed,
+        # Sun1 input, Ring2 output, carrier free):
+        #   Ring1 fixed:  n_s1 = (1 + l1) * n_c            ->  n_c
+        #   Stage-1 mesh: n_p - n_c = (zr1/zp1) * (n_r1 - n_c)  ->  n_p (Gp1, Gp2)
+        #   Stage-2 mesh: n_r2 = (1 - l2) * n_c            ->  n_r2
+        #   Ring1 back-solved from the same chain:         ->  n_r1 (= 0 by design)
+        self.n_carrier = self.ns1 / (1.0 + self.l1)
+        # Note: self.zr1 is stored negative (internal teeth); using its
+        # magnitude keeps the fixed-frame directions physical:
+        #   n_p - n_c = -(|zr1|/zp1) * n_c  (planet walks on the fixed ring)
+        self.n_planet = self.n_carrier * (1.0 - (-self.zr1) / self.zp1)
+        self.n_output = self.n_carrier * (1.0 - self.l2)
+        self.n_ring1 = round(
+            self.n_carrier
+            + (self.zp1 / -self.zr1) * (self.n_planet - self.n_carrier),
+            ROUND_PRECISION)
+
+        # Config B -- Ring2 fixed, carrier output (ns1/g1 = nc):
+        #   Stage-2 internal mesh:  n_p - n_c = -(zr2/zp2) * n_c
+        #   Stage-1 external mesh:  n_s1 - n_c = -gp1s * (n_p - n_c)
+        #   -> n_s1 = (1 + gp1s*gr2p2) * n_c, i.e. nc = ns1 / g1
+        #   Stage-1 internal mesh back-solves ring1.
+        self.n_g1_carrier = self.ns1 / self.g1
+        self.n_g1_planet = self.n_g1_carrier * (1.0 - self.gr2p2)
+        self.n_g1_ring1 = round(
+            self.n_g1_carrier
+            + (self.zp1 / -self.zr1) * (self.n_g1_planet - self.n_g1_carrier),
+            ROUND_PRECISION)
+
+        # Config C -- Carrier fixed, ring2 output:
+        #   Stage-1 external mesh:  n_p = -(zs1/zp1) * ns1
+        #   Stage-1 internal mesh:  n_r1 = (zp1/zr1) * n_p
+        #   Stage-2 internal mesh:  n_r2 = (zp2/zr2) * n_p (= ns1 / g2)
+        self.n_g2_planet = -self.ns1 / self.gp1s
+        self.n_g2_ring1 = round((self.zp1 / -self.zr1) * self.n_g2_planet,
+                                ROUND_PRECISION)
+        self.n_g2_ring2 = round(self.n_g2_planet / self.gr2p2,
+                                ROUND_PRECISION)
+
     # --------------------------------------------------------------- output
     def output(self) -> None:
         """Print ratios and gear sizes to stdout."""
@@ -209,12 +263,40 @@ class PGS:
         print("Ratio Total (Ring2 Fiexed, Carrier Output) = ", self.g1, "")
         print("Ratio Total (Carrier Fixed, Ring2 Output) = ", self.g2, "")
         print("Ratio Total (Type-3K : Carrier Free, Ring2 Output) = ", self.g22, "")
+        print("(Sign + / - : co-rotating / counter-rotating relative to Gs1) ")
+        self._print_speed(
+            "(Type-3K : Carrier Free, Ring2 Output)",
+            [("Input Gear Speed (Gs1)", self.ns1),
+             ("Carrier Speed", self.n_carrier),
+             ("1st Ring Gear Speed (Gr1)", self.n_ring1),
+             ("Planet Gear Speed (Gp1,Gp2)", self.n_planet),
+             ("2nd Ring Gear Speed (Gr2)", self.n_output)])
+        self._print_speed(
+            "(Ring2 Fiexed, Carrier Output)",
+            [("Input Gear Speed (Gs1)", self.ns1),
+             ("Carrier Speed", self.n_g1_carrier),
+             ("1st Ring Gear Speed (Gr1)", self.n_g1_ring1),
+             ("Planet Gear Speed (Gp1,Gp2)", self.n_g1_planet),
+             ("2nd Ring Gear Speed (Gr2)", 0.0)])
+        self._print_speed(
+            "(Carrier Fixed, Ring2 Output)",
+            [("Input Gear Speed (Gs1)", self.ns1),
+             ("Carrier Speed", 0.0),
+             ("1st Ring Gear Speed (Gr1)", self.n_g2_ring1),
+             ("Planet Gear Speed (Gp1,Gp2)", self.n_g2_planet),
+             ("2nd Ring Gear Speed (Gr2)", self.n_g2_ring2)])
         print("### Size")
         print("Sun = ", self.ds1, " [mm],  ", self.zs1, " [ea]")
         print("Planet1 = ", self.dp1, " [mm],  ", self.zp1, " [ea]")
         print("Ring1 = ", self.dr1, " [mm],  ", self.zr1, " [ea]")
         print("Planet2 = ", self.dp2, " [mm],  ", self.zp2, " [ea]")
         print("Ring2 = ", self.dr2, " [mm],  ", self.zr2, " [ea]")
+
+    def _print_speed(self, config: str, rows: list[tuple[str, float]]) -> None:
+        """Print one '### Speed (...)' block for the given lockup config."""
+        print("### Speed", config, "")
+        for label, value in rows:
+            print(label, " = ", self._signed(value), " [rpm]")
 
     def _output_simple(self) -> None:
         print("\n##### Simple Planetary Gear Set")
@@ -248,6 +330,11 @@ class PGS:
     def _emit(heading: str, result: str) -> None:
         print(f"# {heading} : ")
         print(result)
+
+    @staticmethod
+    def _signed(value: float) -> str:
+        """Format a speed value with an explicit +/- direction sign."""
+        return f"{float(value):+.6g}"
 
     def _check_non_factorizing(self) -> None:
         cond = (self.zs1 % self.num_planets != 0
