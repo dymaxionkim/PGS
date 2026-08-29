@@ -55,7 +55,7 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 | 0 | Simple (단순 단단) | — |
 | 1 | 3K-Wolfrom | $k$ 는 `diff` 입력란에 자유롭게 기입 |
 
-여기서 $k$는 두 링기어 치수 차 $\big||Z_{r1}| - |Z_{r2}|\big| = k \cdot N_p$ 에 들어가는 계수이다.
+여기서 $k$는 두 링기어 치수 차 $\left|\,|Z_{r1}| - |Z_{r2}|\,\right| = k \cdot N_p$ 에 들어가는 계수이다.
 
 ---
 
@@ -179,16 +179,19 @@ Result 패널(및 `Result/PGS.md`)에서 아래를 확인한다:
 **(1) 등거리 조건 (1단)** — 유성기어 중심이 캐리어 위에 있으려면:
 
 $$
-|Z_{r1}| = Z_{s1} + 2Z_{p1}
-\quad\Longrightarrow\quad
-Z_{p1} = \frac{|Z_{r1}| - Z_{s1}}{2}
+\begin{gathered}
+|Z_{r1}| = Z_{s1} + 2Z_{p1}\\[6pt]
+\Longrightarrow\quad Z_{p1} = \frac{|Z_{r1}| - Z_{s1}}{2}
+\end{gathered}
 $$
 
 **(2) 2단 내접 물림 조건** — 2단 유성기어 `Gp2`는 캐리어 반경 위에 놓이고, 링2는 이에 맞춘다. 무전위 캐리어 직경 $d_{c0} = m_1 (Z_{s1} + |Z_{r1}|)/2$ 이므로:
 
 $$
-|Z_{r2}| = Z_{p2} + \frac{d_{c0}}{m_2}
-        = Z_{p2} + \frac{m_1 (Z_{s1} + |Z_{r1}|)}{2 m_2}
+\begin{aligned}
+|Z_{r2}| &= Z_{p2} + \frac{d_{c0}}{m_2}\\
+        &= Z_{p2} + \frac{m_1 (Z_{s1} + |Z_{r1}|)}{2 m_2}
+\end{aligned}
 $$
 
 (2단 태양기어도 같은 원리로 캐리어에 안착된다: $d_{s2} = d_c - d_{p2}$.)
@@ -202,23 +205,27 @@ $$
 **(4) 연립** — (2)+(3)을 (1)과 함께 풀면 $|Z_{r1}|$ 에 대한 일차방정식이 된다:
 
 $$
+\begin{aligned}
 |Z_{r1}|\left(m_2 - \frac{m_1}{2}\right)
-= \frac{m_1 Z_{s1}}{2} + m_2 \left(Z_{p2} + k N_p\right)
+&= \frac{m_1 Z_{s1}}{2} + m_2 \left(Z_{p2} + k N_p\right)
+\end{aligned}
 $$
 
 $$
 \therefore\quad
-|Z_{r1}|^{\ast} = \frac{\tfrac{m_1 Z_{s1}}{2} + m_2 (Z_{p2} + k N_p)}{m_2 - \tfrac{m_1}{2}},
-\qquad
-|Z_{r2}|^{\ast} = |Z_{r1}|^{\ast} - k N_p
+\begin{aligned}
+|Z_{r1}|^{\ast} &= \frac{\tfrac{m_1 Z_{s1}}{2} + m_2 (Z_{p2} + k N_p)}{m_2 - \tfrac{m_1}{2}},\\[2pt]
+|Z_{r2}|^{\ast} &= |Z_{r1}|^{\ast} - k N_p
+\end{aligned}
 $$
 
 정수 보장을 위해 **각각 반올림**하여 사용한다 (소수점 오차는 §3.5의 링 전위로 흡수):
 
 $$
-|Z_{r1}| = \mathrm{round}\!\left(|Z_{r1}|^{\ast}\right),
-\qquad
-|Z_{r2}| = \mathrm{round}\!\left(|Z_{r1}|^{\ast} - kN_p\right)
+\begin{aligned}
+|Z_{r1}| &= \mathrm{round}\!\left(|Z_{r1}|^{\ast}\right),\\[2pt]
+|Z_{r2}| &= \mathrm{round}\!\left(|Z_{r1}|^{\ast} - kN_p\right)
+\end{aligned}
 $$
 
 > 프로그램 상에서 내치 기어는 부호 음수로 관리되므로 `self.zr1 = -floor(zr1_real + 0.5)` 형태이다.
@@ -228,18 +235,22 @@ $$
 표준 피치원 직경:
 
 $$
-d_{s1} = m_1 Z_{s1},\qquad
-d_{p1} = m_1 Z_{p1},\qquad
-d_{r1} = m_1 |Z_{r1}|
+\begin{aligned}
+d_{s1} &= m_1 Z_{s1},\\
+d_{p1} &= m_1 Z_{p1},\\
+d_{r1} &= m_1 |Z_{r1}|
+\end{aligned}
 $$
 
 **캐리어 직경**은 전위된 태양–유성 외접 물림의 운용 중심거리(선형 모델)로 계산:
 
 $$
-\boxed{\;
-d_c = d_{s1} + d_{p1} + 2 m_1 (x_{s1} + x_{p1})
-      = m_1 (Z_{s1} + Z_{p1}) + 2 m_1 (x_{s1} + x_{p1})
-\;}
+\boxed{
+\begin{aligned}
+d_c &= d_{s1} + d_{p1} + 2 m_1 (x_{s1} + x_{p1})\\
+   &= m_1 (Z_{s1} + Z_{p1}) + 2 m_1 (x_{s1} + x_{p1})
+\end{aligned}
+}
 $$
 
 즉, 전위 합 $(x_{s1}+x_{p1})$ 만큼 캐리어 반경이 선형적으로 밀려난다. 이는 생성기(GPG/CPG)가 그리는 오프셋 원 반경 $m\,(Z/2 + x)$ 와 일치하는 모델이다.
@@ -247,10 +258,10 @@ $$
 2단에서는 유성2가 캐리어에 고정되므로 거꾸로 태양2를 결정:
 
 $$
-d_{p2} = m_2 Z_{p2},\qquad
-d_{s2} = d_c - d_{p2},\qquad
-Z_{s2} = \frac{d_{s2}}{m_2},\qquad
-d_{r2} = m_2 |Z_{r2}|
+\begin{aligned}
+d_{p2} &= m_2 Z_{p2}, & d_{s2} &= d_c - d_{p2},\\[2pt]
+Z_{s2} &= \frac{d_{s2}}{m_2}, & d_{r2} &= m_2 |Z_{r2}|
+\end{aligned}
 $$
 
 ### 3.4 기어비 (Ratio) — Willis 속도 해석
@@ -258,17 +269,17 @@ $$
 유성기어장치의 속도 관계는 캐리어 기준 상대 회전(Willis 식)으로 쓴다. 외접쌍은 반대방향, 내접쌍은 같은 방향으로 상대 회전한다. 프로그램이 사용하는 3개의 기본 스칼라:
 
 $$
-g_{p1s} = \frac{d_{p1}}{d_{s1}} = \frac{Z_{p1}}{Z_{s1}}
-\quad(\text{태양1–유성1}),
-\qquad
-g_{r2p2} = \frac{d_{r2}}{d_{p2}} = \frac{Z_{r2}}{Z_{p2}}
-\quad(\text{유성2–링2})
+\begin{aligned}
+g_{p1s} &= \frac{d_{p1}}{d_{s1}} = \frac{Z_{p1}}{Z_{s1}}, &&(\text{태양1–유성1})\\[2pt]
+g_{r2p2} &= \frac{d_{r2}}{d_{p2}} = \frac{Z_{r2}}{Z_{p2}}, &&(\text{유성2–링2})
+\end{aligned}
 $$
 
 $$
-l_1 = \frac{d_{r1}}{d_{s1}} = \frac{Z_{r1}}{Z_{s1}},
-\qquad
-l_2 = \frac{d_{r1}\,d_{p2}}{d_{r2}\,d_{p1}} = \frac{Z_{r1}\,Z_{p2}}{Z_{r2}\,Z_{p1}}
+\begin{aligned}
+l_1 &= \frac{d_{r1}}{d_{s1}} = \frac{Z_{r1}}{Z_{s1}},\\[2pt]
+l_2 &= \frac{d_{r1}\,d_{p2}}{d_{r2}\,d_{p1}} = \frac{Z_{r1}\,Z_{p2}}{Z_{r2}\,Z_{p1}}
+\end{aligned}
 $$
 
 #### (a) 링2 고정, 캐리어 출력 ($i_1$) — `g1`
@@ -276,9 +287,10 @@ $$
 링2 고정 $\Rightarrow n_{p1}-n_c = -\dfrac{Z_{r2}}{Z_{p2}} n_c$. 1단 외접 관계 $n_{p1}-n_c = -\dfrac{1}{g_{p1s}}(n_s - n_c)$ 와 연립하면:
 
 $$
-n_{s1} = \left(1 + g_{r2p2}\, g_{p1s}\right) n_c
-\quad\Longrightarrow\quad
+\begin{gathered}
+n_{s1} = \left(1 + g_{r2p2}\, g_{p1s}\right) n_c\\[4pt]
 \boxed{i_1 = 1 + g_{r2p2}\, g_{p1s}}
+\end{gathered}
 $$
 
 #### (b) 캐리어 고정, 링2 출력 ($i_2$) — `g2`
@@ -286,10 +298,11 @@ $$
 $n_c = 0$ 이므로 1단 외접과 2단 내접을 순차 적용:
 
 $$
+\begin{gathered}
 \frac{n_{r2}}{n_{s1}} = -\frac{Z_{s1}}{Z_{p1}}\cdot\frac{Z_{p2}}{Z_{r2}}
-= -\frac{1}{g_{p1s}\, g_{r2p2}}
-\quad\Longrightarrow\quad
+= -\frac{1}{g_{p1s}\, g_{r2p2}}\\[4pt]
 \boxed{i_2 = -\,g_{r2p2}\, g_{p1s}}
+\end{gathered}
 $$
 
 #### (c) 3K 동작: 캐리어 자유, 링1 고정, 링2 출력 ($i_{3K}$) — `g22`
@@ -303,10 +316,12 @@ $$
 두 식에서 $n_c$를 소거:
 
 $$
-\boxed{\;
-i_{3K} = \frac{n_{s1}}{n_{r2}} = \frac{1 + l_1}{1 - l_2},
-\qquad l_2 > 1 \text{ 이면 회전방향이 반전되어 } -\frac{1+l_1}{|1-l_2|}
-\;}
+\boxed{
+\begin{gathered}
+i_{3K} = \frac{n_{s1}}{n_{r2}} = \frac{1 + l_1}{1 - l_2},\\[4pt]
+\big(l_2 > 1\ \text{이면 회전방향이 반전되어}\ -\frac{1+l_1}{|1-l_2|}\big)
+\end{gathered}
+}
 $$
 
 $l_2 \to 1$ 로 갈 때 감속비가 발산하므로, **감속비의 크기는 치수 차 $k$ (Type) 선택으로 $l_2$를 1에 가깝게 하는 정도로 조절**된다. 결과는 기약분수(예: `58.5 = 117/2`)로도 출력된다.
@@ -314,8 +329,10 @@ $l_2 \to 1$ 로 갈 때 감속비가 발산하므로, **감속비의 크기는 �
 #### (d) Simple 타입의 경우 — `g3`, `g4`
 
 $$
-i_{\text{carrier}} = 1 - \frac{Z_{r1}}{Z_{s1}},\qquad
-i_{\text{ring}} = -\frac{|Z_{r1}|}{Z_{s1}}
+\begin{aligned}
+i_{\text{carrier}} &= 1 - \frac{Z_{r1}}{Z_{s1}},\\[2pt]
+i_{\text{ring}} &= -\frac{|Z_{r1}|}{Z_{s1}}
+\end{aligned}
 $$
 
 多단 직렬 시 각 단 기어비의 거듭제곱으로 총비가 계산되어(1·2·3단) 함께 표시된다.
@@ -327,43 +344,40 @@ $$
 **A. Type-3K : Carrier Free, Ring2 Output (링1 고정):**
 
 $$
-\boxed{\;
-n_c = \frac{n_{s1}}{1 + l_1},
-\qquad
-n_{p} = n_c\left(1 - \frac{|Z_{r1}|}{Z_{p1}}\right),
-\qquad
-n_{r1} = n_c + \frac{Z_{p1}}{|Z_{r1}|}\,(n_{p} - n_c) \equiv 0,
-\qquad
+\boxed{
+\begin{gathered}
+n_c = \frac{n_{s1}}{1 + l_1},\\[2pt]
+n_{p} = n_c\left(1 - \frac{|Z_{r1}|}{Z_{p1}}\right),\\[2pt]
+n_{r1} = n_c + \frac{Z_{p1}}{|Z_{r1}|}\,(n_{p} - n_c) \equiv 0,\\[2pt]
 n_{r2} = (1 - l_2)\, n_c
-\;}
+\end{gathered}
+}
 $$
 
 **B. Ring2 Fixed, Carrier Output (기어비 $g_1$ 구성):**
 
 $$
-\boxed{\;
-n_c = \frac{n_{s1}}{g_1},
-\qquad
-n_{p} = n_c\,(1 - g_{r2p2}),
-\qquad
-n_{r1} = n_c\left(1 - \frac{Z_{p1}}{|Z_{r1}|}\,g_{r2p2}\right),
-\qquad
+\boxed{
+\begin{gathered}
+n_c = \frac{n_{s1}}{g_1},\\[2pt]
+n_{p} = n_c\,(1 - g_{r2p2}),\\[2pt]
+n_{r1} = n_c\left(1 - \frac{Z_{p1}}{|Z_{r1}|}\,g_{r2p2}\right),\\[2pt]
 n_{r2} \equiv 0
-\;}
+\end{gathered}
+}
 $$
 
 **C. Carrier Fixed, Ring2 Output (기어비 $g_2$ 구성):**
 
 $$
-\boxed{\;
-n_c \equiv 0,
-\qquad
-n_{p} = -\frac{n_{s1}}{g_{p1s}},
-\qquad
-n_{r1} = \frac{Z_{p1}}{|Z_{r1}|}\,n_{p},
-\qquad
+\boxed{
+\begin{gathered}
+n_c \equiv 0,\\[2pt]
+n_{p} = -\frac{n_{s1}}{g_{p1s}},\\[2pt]
+n_{r1} = \frac{Z_{p1}}{|Z_{r1}|}\,n_{p},\\[2pt]
 n_{r2} = \frac{n_{p}}{g_{r2p2}} = \frac{n_{s1}}{g_2}
-\;}
+\end{gathered}
+}
 $$
 
 - **유성기어(`Gp1`, `Gp2`, 일체)**: 고정 링 위를 걸어가는 관계로 인해 B·C·A 구성 모두에서 **입력과 반대 방향(−)으로 회전**한다.
@@ -383,11 +397,12 @@ $$
 운용 피치점에서 치두께(유성 치가 링 치홈을 정확히 채움)를 일치시키면:
 
 $$
-\boxed{\;
-x_r = \frac{(Z_r - Z_p)\,\big(\operatorname{inv}\alpha_0 - \operatorname{inv}\alpha'\big)}{2\tan\alpha_0} - x_p,
-\qquad
+\boxed{
+\begin{gathered}
+x_r = \frac{(Z_r - Z_p)\,\big(\operatorname{inv}\alpha_0 - \operatorname{inv}\alpha'\big)}{2\tan\alpha_0} - x_p,\\[4pt]
 \operatorname{inv}\alpha \equiv \tan\alpha - \alpha
-\;}
+\end{gathered}
+}
 $$
 
 의도적으로 백래시 $B$는 보상하지 않으므로, 입력 $B$는 그대로 플랭크 여유로 작동한다.
@@ -407,8 +422,10 @@ $$
 **(1) 연속 물림 조건 (Non-Factorizing, 소음 관련 — 필수 아님)**
 
 $$
-Z_{s1} \bmod N_p \ne 0 \;\wedge\; |Z_{r1}| \bmod N_p \ne 0
-\quad(\text{2단: } |Z_{r2}| \bmod N_p \ne 0)
+\begin{gathered}
+Z_{s1} \bmod N_p \ne 0 \;\wedge\; |Z_{r1}| \bmod N_p \ne 0\\[2pt]
+(\text{2단: } |Z_{r2}| \bmod N_p \ne 0)
+\end{gathered}
 $$
 
 동일한 치가 동시에 여러 물림에 걸리는 것을 피해 소음·진동에 유리하다.
@@ -416,8 +433,10 @@ $$
 **(2) 등간 배치 조건 (Equal Distance / 조립 조건)**
 
 $$
-(Z_{s1} - Z_{r1}) \bmod N_p = 0
-\quad(\text{2단: } |Z_{r2}| \bmod N_p = 0)
+\begin{gathered}
+(Z_{s1} - Z_{r1}) \bmod N_p = 0\\[2pt]
+(\text{2단: } |Z_{r2}| \bmod N_p = 0)
+\end{gathered}
 $$
 
 Type 코드 2(diff=0.5)의 1단만 예외적으로 법수를 $N_p \cdot k$ 로 사용한다.
@@ -425,16 +444,19 @@ Type 코드 2(diff=0.5)의 1단만 예외적으로 법수를 $N_p \cdot k$ 로 �
 **(3) 유성기어 상호 간섭 조건 (Non-Overlap)** — 이웃 유성기어 치 끝이 서로 닿지 않아야 한다. 유성기어 외경 계수 1($r_a = m(Z_p/2+1)$)과 $\sin$ 기하로부터:
 
 $$
-1\text{단: }\quad N_p < \frac{\pi}{\arcsin\!\left(\dfrac{Z_{p1}+2}{Z_{p1}+Z_{s1}}\right)}
-\qquad\qquad
+\begin{gathered}
+1\text{단: }\quad N_p < \frac{\pi}{\arcsin\!\left(\dfrac{Z_{p1}+2}{Z_{p1}+Z_{s1}}\right)}\\[4pt]
 2\text{단: }\quad N_p < \frac{\pi}{\arcsin\!\left(\dfrac{m_2 (Z_{p2}+2)}{d_c}\right)}
+\end{gathered}
 $$
 
 **(4) 인볼루트 간섭 조건 (Involute Interference)** — 내접쌍에서 유성 치 끝이 링 플랭크의 인볼루트부를 침범하지 않아야 한다. 한계 치수:
 
 $$
-\tau(Z_p) = \frac{(Z_p \sin\alpha_0)^2 - 4}{2 (Z_p \sin\alpha_0)^2 - 4}
-\qquad\text{조건: }\quad |Z_{r}| \ge \tau(Z_p)
+\begin{gathered}
+\tau(Z_p) = \frac{(Z_p \sin\alpha_0)^2 - 4}{2 (Z_p \sin\alpha_0)^2 - 4},\\[4pt]
+\text{조건: }\quad |Z_{r}| \ge \tau(Z_p)
+\end{gathered}
 $$
 
 **(5) 트리밍 간섭 조건 (Trimming Interference)** — 링기어 립(rim) 두께 확보:
@@ -458,20 +480,27 @@ $$
 **(1) 기준 원들**
 
 $$
-r_b = \tfrac{mZ}{2}\cos\alpha_0 \;(\text{기원}),\quad
-r_p = m\!\left(\tfrac{Z}{2}+x\right) \;(\text{피치}),\quad
-r_a = m\!\left(\tfrac{Z}{2}+x+A\right),\quad
-r_f = m\!\left(\tfrac{Z}{2}+x-D\right)
+\begin{aligned}
+r_b &= \tfrac{mZ}{2}\cos\alpha_0, &&(\text{기원})\\[2pt]
+r_p &= m\!\left(\tfrac{Z}{2}+x\right), &&(\text{피치})\\[2pt]
+r_a &= m\!\left(\tfrac{Z}{2}+x+A\right),\\[2pt]
+r_f &= m\!\left(\tfrac{Z}{2}+x-D\right)
+\end{aligned}
 $$
 
 **(2) 인볼루트 곡선** — 매개변수 $t$ 에 대해:
 
 $$
-r(t) = r_b\sqrt{1+t^2},\qquad
-\varphi(t) = \alpha_{is} + t - \arctan t
+\begin{aligned}
+r(t) &= r_b\sqrt{1+t^2},\\[2pt]
+\varphi(t) &= \alpha_{is} + t - \arctan t
+\end{aligned}
 $$
 $$
-(X, Y) = \big(r(t)\cos\varphi(t),\; r(t)\sin\varphi(t)\big),\qquad t \in [\theta_{is}, \theta_{ie}]
+\begin{gathered}
+(X, Y) = \big(r(t)\cos\varphi(t),\; r(t)\sin\varphi(t)\big),\\[2pt]
+t \in [\theta_{is},\ \theta_{ie}]
+\end{gathered}
 $$
 
 인볼루트 시작각(치두께·전위·백래시를 반영):
@@ -484,18 +513,19 @@ $$
 매개변수 범위는 루트 쪽 $\theta_{is}$(호브 선단 반경 $C$, 전위 $x$, 임의 깊이 $D$ 포함식)부터 치끝 쪽 $\theta_{ie}$(임의 높이 $A$, 치끝 반경 $E$ 포함식)까지:
 
 $$
-\theta_{is} = \tan a_0
-+ \frac{2\big(C(1-\sin a_0) + x - D\big)}{Z\cos a_0 \sin a_0},
-\qquad
-\theta_{ie} = \frac{2E}{Z\cos a_0}
-+ \sqrt{\left(\frac{Z+2(x+A-E)}{Z\cos a_0}\right)^2 - 1}
+\begin{aligned}
+\theta_{is} &= \tan a_0 + \frac{2\big(C(1-\sin a_0) + x - D\big)}{Z\cos a_0 \sin a_0},\\[2pt]
+\theta_{ie} &= \frac{2E}{Z\cos a_0} + \sqrt{\left(\frac{Z+2(x+A-E)}{Z\cos a_0}\right)^2 - 1}
+\end{aligned}
 $$
 
 **(3) 치끝 라운드(E)** — 인볼루트 끝점과 외호상 끝점 $(x_e, y_e)$ 을 반경 $mE$ 의 원호로 연결:
 
 $$
-x_e = m\left(\tfrac{Z}{2}+x+A\right)\cos\alpha_e,\qquad
+\begin{gathered}
+x_e = m\left(\tfrac{Z}{2}+x+A\right)\cos\alpha_e,\\[2pt]
 y_e = m\left(\tfrac{Z}{2}+x+A\right)\sin\alpha_e
+\end{gathered}
 $$
 
 라운드가 인볼루트·외호 교점을 넘지 않도록 $E$ 값을 자동 트림하는 보정이 들어 있다.
@@ -503,18 +533,22 @@ $$
 **(4) 루트 필렛(트로코이드, C)** — 호브 선단이 만드는 트로코이드 궤적:
 
 $$
+\begin{gathered}
 \begin{aligned}
 X &= m\Big[\big(\tfrac{Z}{2}+x-D+C\big)\cos\theta + \tfrac{Z}{2}\,\theta \sin\theta - C\cos(\theta_s + \theta)\Big]\\
 Y &= m\Big[\big(\tfrac{Z}{2}+x-D+C\big)\sin\theta - \tfrac{Z}{2}\,\theta \cos\theta - C\sin(\theta_s + \theta)\Big]
-\end{aligned}
-\qquad \theta\in[0,\theta_{te}]
+\end{aligned}\\[6pt]
+\theta \in [0,\ \theta_{te}]
+\end{gathered}
 $$
 
 **(5) 치 배열** — 반쪽 치형을 $y$축 미러링으로 완성하고, 치 하나를 $x$축에 정렬(정렬각 $\pi/2-\pi/Z$)한 뒤, 피치각만큼씩 회전 복사:
 
 $$
-\Delta\theta = \frac{2\pi}{Z},\qquad
-P_i = R(-i\,\Delta\theta)\, P_{\text{tooth}},\quad i = 0 \ldots Z-1
+\begin{aligned}
+\Delta\theta &= \frac{2\pi}{Z},\\[2pt]
+P_i &= R(-i\,\Delta\theta)\, P_{\text{tooth}}, \quad i = 0,\, \ldots,\, Z-1
+\end{aligned}
 $$
 
 **(6) 내접(링) 기어 관례** — `teeth < 0` 이면 치수·전위·백래시 부호를 반전하고 임의 높이↔깊이, 호브선단↔치선단 계수를 서로 교환하여 같은 수식으로 내치형을 생성한다. 위치는 $(x_0, y_0)$ 평행이동 + `rotate_angle` 회전으로 배치되며, 유성기어에는 $y_0 = d_c/2$ 가 부여된다.
