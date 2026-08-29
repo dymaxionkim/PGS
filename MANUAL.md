@@ -23,10 +23,12 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 
 | 파일 | 역할 |
 |------|------|
-| `design.py` | GUI 진입점 (Tkinter/ttk 입력 화면, 이벤트 처리, matplotlib 도면 출력, 보고서·CSV 저장) |
+| `design.py` | GUI 진입점 (Tkinter/ttk 입력 화면, Run·Save 이벤트 처리, matplotlib 도면·프리뷰 출력, 보고서·PNG·기어별 CSV 및 FGPG2 결과 저장) |
 | `PGS.py` | 유성기어장치 치수 계산기 (치수 배치 해, 기어비, 기하학적 제약 검사) |
 | `GPG.py` | 인볼루트 치형 프로파일 생성기 (외/내접 기어 공용) |
 | `CPG.py` | 사이클로이드 치형 프로파일 생성기 (`GPG`와 동일 인터페이스의 교체용 모듈) |
+| `FGPG2_CLI.py` | 이식된 FGPG2 CLI 진입점 (`FGPG2_CLI.py <Inputs.csv> [involute\|cycloid]`) — 기어별 Result 파일을 재생성 |
+| `fgpg2/` | 프로젝트에 이식된 FGPG2 치형 생성 패키지 (`gear.py`, `cycloid.py`, `exporters.py`, `plotter.py`) — Save 시 `Result.csv`/`Result.dxf`/`Result1.png`/`Result2.png`를 인프로세스로 생성 |
 | `PGS.bat` / `PGS.sh` | OS별 실행 스크립트 |
 
 ### 1.2 Wolfrom(3K) 유성기어장치의 구조
@@ -74,21 +76,23 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 
 - **Type 콤보박스**에서 `Simple` 또는 `3K-Wolfrom` 중 선택한다.
 - `3K-Wolfrom`을 선택하면 바로 아래에 `diff` 텍스트 입력란이 나타나며, 여기에 치수 차 $k$ 를 자유롭게 기입한다.
+- `Simple`을 선택하면 `diff` 입력란과 2단 관련 입력(`Module2, m2` · `Shift factor, Gp2.X` · `Planet2 Teeth, Zp2`)이 숨겨지고, 1단 링기어 치수 `Ring1 Teeth, Zr1` 입력이 대신 나타난다. Plot 옵션도 1단 전용(`Stage1`/`Gs1`/`Gp1`/`Gr1`)만 제공한다.
 - 큰 감속비가 필요하면 큰 $k$, 소형·저감속이면 작은 $k$ 를 고른다.
 - GUI 기본값은 `3K-Wolfrom` / `diff = 12.0` 이다.
 
 ### 2.3 Step 2 — 독립 설계 변수 입력 ("Planetary System" 카드)
 
-3K Wolfrom 시스템의 독립 설계 변수는 정확히 6개이다. 나머지 치수(`Zp1`, `Zr1`, `Zr2`, `Zs2`)와 직경들은 자동으로 결정된다.
+3K Wolfrom 시스템의 독립 설계 변수는 정확히 6개이다. 나머지 치수(`Zp1`, `Zr1`, `Zr2`, `Zs2`)와 직경들은 자동으로 결정된다. **Simple**은 1단만 존재하므로 `Zp2` 대신 `Zr1`을 직접 입력하고, `m2`·`Gp2.X`는 비활성화된다.
 
 | 입력 항목 | 기호 | 의미 / 선정 지침 |
 |-----------|------|------------------|
 | Module1, m1 | $m_1$ | 1단 모듈 [mm], > 0 |
 | Module2, m2 | $m_2$ | 2단 모듈 [mm]. 조건 $\boldsymbol{m_2 \ne m_1/2}$ 필요(배치 해의 분모). 통상 $m_2 > m_1$ |
 | Planets number, Np | $N_p$ | 유성기어 개수 [ea], > 2 (등간 배치·조립 조건을 만족해야 함) |
-| Planet2 Teeth, Zp2 | $Z_{p2}$ | 2단 유성기어 치수 [ea] |
+| Planet2 Teeth, Zp2 | $Z_{p2}$ | 2단 유성기어 치수 [ea] — **3K-Wolfrom만 입력** |
+| Ring1 Teeth, Zr1 | $Z_{r1}$ | 1단 링기어 치수 [ea] — **Simple만 입력** (기어비를 직접 좌우함; `Zp2` 대신 입력) |
 | Sun1 Teeth, Zs1 | $Z_{s1}$ | 1단 태양기어 치수 [ea] — **기어비를 직접 좌우하는 값** |
-| Input speed, ns1 | $n_{s1}$ | 태양기어 `Gs1`의 입력 회전수 [rpm] — **Speed 블록(§3.4-e)의 운전 속도 계산에 사용** |
+| Input speed, ns1 | $n_{s1}$ | 태양기어 `Gs1`의 입력 회전수 [rpm] — **Speed 블록(§3.4-e·f)의 운전 속도 계산에 사용** |
 
 ### 2.4 Step 3 — 치형 상세 파라미터 입력 ("Involute Gear Spec" 카드)
 
@@ -109,10 +113,11 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 
 ### 2.5 Step 4 — Plot 옵션과 치형 종류 선택
 
-**Plot option** — 전체 도면 구성 또는 **개별 기어 1개만** 그릴 수 있다:
+**Plot option** — 프리뷰 인터랙티브 창과 **저장 시 도면 범위**를 결정한다:
 
-- 개별 기어: `Gs1` / `Gp1` / `Gr1` (1단), `Gp2` / `Gr2` (2단) — 선택한 기어 하나만 도면
-- 구성 단위: `Stage1`(1단만) / `Stage2`(2단만, Wolfrom 한정) / `Total`(1·2단 전체 겹침 도면)
+- 개별 기어: `Gs1` / `Gp1` / `Gr1` (1단), `Gp2` / `Gr2` (2단, Wolfrom 한정) — 선택한 기어 하나만 도면
+- 구성 단위: `Stage1`(1단만) / `Stage2`(2단만, **Wolfrom 한정**) / `Total`(1·2단 전체 겹침 도면)
+- Simple에서는 1단 전용 옵션(`Stage1` / `Gs1` / `Gp1` / `Gr1`)만 제공된다.
 - 유성기어(`Gp1`, `Gp2`) 선택 시 `Np`개의 유성기어 배열이 그려진다.
 
 색상 규칙: 1단 기어는 **회색 계열**(인볼루트 = `dimgray`, 사이클로이드 = `#95c4ed`), 2단 기어는 **검정/남색 계열**(인볼루트 = `black`, 사이클로이드 = `#19609d`)로 구분된다.
@@ -122,11 +127,11 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 - `Involute Teeth`(GPG) 또는 `Cycloid Teeth`(CPG) 중 하나만 선택
 - **`All`** — **인볼루트와 사이클로이드 두 프로파일을 동시에 겹쳐서** 도면. 각 프로파일은 고유 색상으로 구분되어 어느 Plot 선택 옵션에서도 함께 표시된다.
 
-> **참고 — Plot option의 산출 파일명**: `Stage1`→`PGS1.png`, `Stage2`→`PGS2.png`, `Total`→`PGS.png`, 개별 기어→`Gs1.png`, `Gp1.png`, `Gr1.png`, `Gp2.png`, `Gr2.png`.
+> **참고 — 저장 시 산출 파일명**: `Plot option`과 무관하게 **전체 대상에 대해 도면을 모두 저장**한다. 파일명 규칙은 §2.6 Save 단계의 [결과 파일] 목록 참조.
 
-### 2.6 Step 5 — Run 버튼 클릭 (계산 파이프라인)
+### 2.6 Step 5 — Run · Save 버튼 (계산 및 파일 저장)
 
-Run을 누르면 다음 파이프라인이 자동 수행된다:
+**Run**을 누르면 계산·프리뷰만 수행되고 **파일은 저장되지 않는다**:
 
 1. `read_parameters()` — GUI 입력값을 모델 객체로 이관
 2. `PGS.calc()` — 치수 배치 해·직경·기어비 계산 (§3.2~3.3)
@@ -134,28 +139,41 @@ Run을 누르면 다음 파이프라인이 자동 수행된다:
 4. `PGS.checks_run()` — 6종 기하학적 타당성 검사 (§3.6)
 5. `finalize_parameters()` — 링기어 전위계수 자동 산출 등 최종 파라미터 확정 (§3.5)
 6. 각 기어별 `GPG.calc()` — 6개 기어(또는 Simple은 3개)의 치형 점군 생성 (§3.7)
-7. `build_report()` + `save_output()` — Markdown 보고서를 Result 패널 표시 후 `Result/PGS.md` 저장, 기어별 가공입력 `Result/<Gear>/Inputs.csv` 저장
-8. `plot_pgs()` — 선택한 Plot option에 따라 기어 배열 도면을 표시하고 저장 (`Result/PGS1.png`, `PGS2.png`, `PGS.png`, 또는 개별 기어 파일) — Teeth profile이 `All`이면 두 치형 프로파일을 겹쳐 표시
+7. `build_report()` — Markdown 보고서를 Result 패널에 표시
+8. `plot_pgs()` — 선택한 Plot option에 따라 인터랙티브 프리뷰만 표시 (Teeth profile이 `All`이면 두 치형 프로파일을 겹쳐 표시)
+
+**Save**를 누르면 폴더 선택 대화상자가 열리고, 선택한 폴더 아래에 `Result/`를 만들고 **동일 계산을 재실행**하여 모든 산출물을 저장한다 (저장 중에는 Save 버튼이 비활성화되고 완료 후 다시 활성화된다).
+
+- `Result/README.md` — 보고서 (Result 패널과 동일 내용)
+- `Result/Involute_*.png`, `Result/Cycloid_*.png`, `Result/All_*.png` — **전체 대상에 대한 치형 도면**
+  - 명명 규칙: `{Involute|Cycloid}_` 접두사 + 범위(`Stage1`/`Stage2`/`Total` 또는 기어명 `Gs1`/`Gp1`/`Gr1`/`Gp2`/`Gr2`)
+  - `All_*`는 **각 보기**(전체·기어별)별 겹침 도면으로, 3K-Wolfrom은 `All_Total`, `All_Gs1`, `All_Gp1`, `All_Gr1`, `All_Gp2`, `All_Gr2` 6종, Simple은 `All_Stage1`, `All_Gs1`, `All_Gp1`, `All_Gr1` 4종
+  - 합계: 3K-Wolfrom은 `Involute_`/`Cycloid_` 각 8개 + `All_` 6개 = **22개**, Simple은 각 4개 + 4개 = **12개**
+  - 사이클로이드 기하 생성이 불가능하면(예: 비정수 $Z_{s2}$) 콘솔에 `WARN`을 출력하고 **Cycloid/All 도면만 건너뛴다** (인볼루트 도면·보고서·기어별 결과는 정상 저장).
+- `Result/<Gear>/Inputs.csv` — 기어별 가공입력 (Gs1, Gp1, Gr1, [+Gp2, Gr2]; Gs2 제외)
+- `Result/<Gear>/{Involute,Cycloid}/` — 프로파일별 FGPG2 결과
+  - `Inputs.csv` + `Result.csv`(치형 좌표) + `Result.dxf`(절삭 도면) + `Result1.png`(치형 개수 view) + `Result2.png`(닫힌 치형 view) — `FGPG2_CLI.py <csv> [involute|cycloid]`를 인프로세스로 호출해 생성
 
 ### 2.7 Step 6 — 결과 확인 및 반복 수렴
 
-Result 패널(및 `Result/PGS.md`)에서 아래를 확인한다:
+Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
 
 - **Check Geometrical Conditions** — 6종 검사 전부가 통과("OK")될 때까지 Step 2~4의 값을 바꾸며 반복한다.
   - 실패 시의 조정 방향 예시: `Equal Distance` 실패 → $Z_{s1}$, $N_p$, $k$ 변경 / `Planets Interference` 실패 → $N_p$ 축소 또는 $Z_{p2}$ 변경 / `Trimming Interference` 실패 → 링-유성 치수 차가 최소 16 이상 되도록 변경
 - **Ratio** — 각 단 및 전체 기어비 (§3.4의 정의대로 출력됨)
-- **Size** — 6개 기어의 피치원 직경과 치수, 캐리어 반경
+- **Speed** — 조립 구성별 운전 속도 (Wolfrom 3종 §3.4-e, Simple 2종 §3.4-f)
+- **Size** — 기어들의 피치원 직경과 치수, 캐리어 반경 (Simple은 1단 3개만)
 
 **주의**: 2단 태양기어 치수 $Z_{s2}$ 는 캐리어 반경에 맞춰 계산되므로 정수가 아닐 수 있다(예: 15.066667). 이는 실물 제작 시 특수 처리(장여향 전위·비정수 치수 절법 등)가 필요함을 의미하며, 도면화 관점의 기하 참조값이다.
 
 ### 2.8 설계 순서 요약 (한 장 요약)
 
 ```
-감속비 요구치 결정 → Type(k) 선택 → (m1, m2, Np, Zp2, Zs1) 입력
-→ 전위·백래시·치형 파라미터 입력 → Run
+감속비 요구치 결정 → Type(k) 선택 → (m1, m2, Np, Zp2[·Wolfrom] 또는 Zr1[·Simple], Zs1) 입력
+→ 전위·백래시·치형 파라미터 입력 → Run (계산·프리뷰만)
 → 자동: 치수 배치 해(Zp1, Zr1, Zr2, Zs2), 기어비, 링 전위계수, 치형 도면
 → 기하 검사 6종 통과 여부 확인 → 미달이면 입력 변경 후 재실행(반복)
-→ 전부 OK면 Result/ 하위의 .md/.png/.csv 산출물로 설계 완료
+→ 전부 OK면 Save → 선택 폴더에 Result/ 생성 (README.md · 도면 PNG · 기어별 CSV·FGPG2 산출물)
 ```
 
 ---
@@ -337,7 +355,7 @@ i_{\text{ring}} &= -\frac{|Z_{r1}|}{Z_{s1}}
 
 多단 직렬 시 각 단 기어비의 거듭제곱으로 총비가 계산되어(1·2·3단) 함께 표시된다.
 
-#### (e) 운전 속도 산출 [rpm] — Speed 블록 3종 (`n_*` 속성)
+#### (e) 운전 속도 산출 [rpm] — Speed 블록 3종 (Wolfrom, `n_*` 속성)
 
 입력 회전수 $n_{s1}$ [rpm] 이 주어지면, 지배 조건(어느 요소를 고정하고 어느 요소를 출력하는가)에 따라 세 가지 조립 구성의 실제 회전속도가 결정된다. 모든 블록의 값은 `Gs1` 입력 방향 기준 $+/-$ 로 표기된다.
 
@@ -383,6 +401,37 @@ n_{r2} = \frac{n_{p}}{g_{r2p2}} = \frac{n_{s1}}{g_2}
 - **유성기어(`Gp1`, `Gp2`, 일체)**: 고정 링 위를 걸어가는 관계로 인해 B·C·A 구성 모두에서 **입력과 반대 방향(−)으로 회전**한다.
 - **고정 요소**: 각 구성의 지배부(링1 또는 링2 또는 캐리어)는 항상 $+0$ [rpm] 으로 산출·검산되며, 구속조건에서 벗어나는 나머지 자유 요소(예: B 구성의 링1)는 유속(idling) 속도를 가진다.
 - **검산**: A에서 $n_{r2}=n_{s1}/i_{3K}$, B에서 $n_c=n_{s1}/g_1$, C에서 $n_{r2}=n_{s1}/g_2$ — 감속비 정의와 자동 일치하며, 세 구성 모두 1단 외접·1단 내접·2단 내접의 Willis 항등식을 만족한다.
+
+#### (f) Simple 타입의 운전 속도 [rpm] — Speed 블록 2종 (`n_*` 속성)
+
+Simple은 1단 구조이므로 Speed 블록이 **2가지** 출력된다 (기본값 `Zr1=36, Zs1=12, ns1=1000` 예시 부호 포함).
+
+**① Carrier Fixed, Ring1 Output (스타 트레인, `n_c ≡ 0`):**
+
+```math
+\boxed{
+\begin{gathered}
+n_s = n_{s1},\quad n_c \equiv 0,\\[2pt]
+n_{p} = -\frac{n_{s1}}{g_{p1s}},\\[2pt]
+n_{r} = \frac{Z_{p1}}{|Z_{r1}|}\,n_{p}
+\end{gathered}
+}
+```
+
+**② Ring1 Fixed, Carrier Output (고전 감속, `n_r ≡ 0`):**
+
+```math
+\boxed{
+\begin{gathered}
+n_s = n_{s1},\quad n_r \equiv 0,\\[2pt]
+n_c = \frac{n_{s1}}{g_3},\\[2pt]
+n_{p} = n_c\left(1 - \frac{|Z_{r1}|}{Z_{p1}}\right)
+\end{gathered}
+}
+```
+
+- **검산**: ①은 $n_r = n_{s1}/g_4$, ②는 $n_c = n_{s1}/g_3$ 로 감속비 정의와 자동 일치한다.
+- 예: `Zr1=36, Zs1=12, ns1=1000` → ① `+1000 / +0 / −333.333 / −1000 [rpm]` (Gs1/Carrier/Gr1/Gp1), ② `+1000 / +250 / +0 / −500 [rpm]`.
 
 ### 3.5 링기어 전위계수 자동 산출 (무백래시 내접 보정) — `_ring_shift_factor()`
 
@@ -608,7 +657,7 @@ flowchart LR
         S8 -->|"Involute"| S9a["⑨ GPG.calc ×6<br/>인볼루트 점군"]
         S8 -->|"Cycloid"| S9b["⑨ CPG.calc ×6<br/>사이클로이드 점군"]
         S8 -->|"All"| S9c["⑨ GPG.calc ×6 + CPG.calc ×6<br/>두 프로파일 점군 병행 생성"]
-        S9a --> S10["⑩ build_report · save_output<br/>PGS.md · Inputs.csv<br/>plot_pgs → PNG<br/>(Stage1/Stage2/Total/<br/>Gs1·Gp1·Gr1·Gp2·Gr2 선택)"]
+        S9a --> S10["⑩ build_report → 프리뷰 전용<br/>Save → Result/ 하위<br/>README.md · Inputs.csv ·<br/>Involute_/Cycloid_/All_ PNG<br/>+ 기어별 Involute·Cycloid폴더"]
         S9b --> S10
         S9c --> S10
         S10 --> S11(["⑪ 도면 표시 (All이면 겹쳐 표시)<br/>Exit 시 종료"])
@@ -671,7 +720,7 @@ flowchart LR
 
 입력: `TYPE=13(diff=12), m1=0.8, m2=1.2, Np=3, Zp2=20, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=Gp2.X=0.4, B=0.04, α=20°`
 
-주요 결과 (`Result/PGS.md`):
+주요 결과 (`Result/README.md`):
 
 | 항목 | 값 |
 |------|-----|
@@ -687,12 +736,32 @@ flowchart LR
 | 캐리어 반경 | 21.04 mm |
 | 6종 기하 검사 | Equal Distance 1·2 OK, 간섭류 전부 OK |
 
+---
+
+Simple 예시 (기본값: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B=0.04, α=20°`):
+
+입력: `TYPE=Simple, m1=0.5, Np=3, Zr1=36, Zs1=12, ns1=1000`
+
+| 항목 | 값 |
+|------|-----|
+| Zp1 / Zr1 | 12 / −36 |
+| Ratio (Sun–Planet1) | 1.0 |
+| Ratio Total (Carrier Output) `g3` | 4.0 |
+| Ratio Total (Ring1 Output) `g4` | −3.0 |
+| Speed ① (Carrier Fixed, Ring1 Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +0 / −333.333 / −1000 [rpm] |
+| Speed ② (Ring1 Fixed, Carrier Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +250 / +0 / −500 [rpm] |
+
+> 저장되는 결과 파일은 위 Wolfrom 예시와 마찬가지로 `Result/README.md`, `Involute_*/Cycloid_*/All_*` PNG(Simple은 12개), `Result/Gs1|Gp1|Gr1/` 기어 폴더 구조를 갖는다.
+
 ## 부록 B. 제한 사항 및 주의
 
 - 배치 방정식의 분모 조건: $m_2 - m_1/2 \ne 0$ (즉 $m_2 \ne m_1/2$).
 - 간섭 검사류는 압력각 20°(표준)에서만 유효하다.
 - 링기어 치수는 무전위 해의 반올림이므로 ±0.5치 이내의 미세 물림 오차가 링 전위로 흡수된다.
 - $Z_{s2}$ 는 비정수가 될 수 있으며, 이는 모델상의 기하 참조값이다.
-- **사이클로이드(`CPG`)는 비정수 치수 기어를 생성할 수 없다.** Wolfrom에서는 2단 태양기어 $Z_{s2}$ 가 비정수(예: 15.0667)로 나올 수 있는데, 이 경우 `Cycloid Teeth` 또는 `All`을 선택하면 `CPG`가 "창성원이 너무 큽니다 (rp > r 여야 합니다)"와 같은 오류로 중단된다. 이때는 `Involute Teeth`를 쓰거나, $Z_{s1}$, $N_p$, $k$ 등을 바꿔 $Z_{s2}$ 가 정수가 되도록 조정해야 한다.
+- **사이클로이드(`CPG`)는 비정수 치수 기어를 생성할 수 없다.** Wolfrom에서는 2단 태양기어 $Z_{s2}$ 가 비정수(예: 15.0667)로 나올 수 있다.
+  - **Save(저장)** 경로: 사이클로이드 점군 생성에 실패하면(`창성원이 너무 큽니다 (rp > r 여야 합니다)` 등) 콘솔에 `WARN: cycloid profile generation failed (...)`
+    로그를 남기고 **해당 Cycloid/All 도면만 건너뛴다.** 인볼루트 도면·보고서·기어별 CSV/DXF/FGPG2 결과는 모두 정상 저장되며, 기어별 `Involute/`, `Cycloid/` 폴더의 FGPG2 산출물은 실패와 무관하게 두 프로파일 모두 생성된다.
+  - **Run(프리뷰)** 경로: `Cycloid Teeth` 또는 `All`을 선택한 상태에서 CPG 점군 생성 단계의 오류는 예외로 이어져 콘솔에 출력된다. 이때는 `Involute Teeth`를 쓰거나, $Z_{s1}$, $N_p$, $k$ 등을 바꿔 $Z_{s2}$ 가 정수가 되도록 조정해야 한다.
 - 기하 검사 6종(§3.6)은 압력각 기반 인볼루트 기하로 계산되므로, 사이클로이드 치형을 선택한 경우에도 참고용으로만 사용된다.
 - 기어비는 소수 6자리로 반올림되어 출력된다.

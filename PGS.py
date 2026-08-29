@@ -118,6 +118,17 @@ class PGS:
         # --- Simple-only ratios ---
         self.g3: float = 0.0
         self.g4: float = 0.0
+        # --- Simple operating speeds [rpm] ---
+        # "Carrier Fixed, Ring1 Output" (star train; carrier stationary):
+        self.n_cf_sun: float = 0.0
+        self.n_cf_carrier: float = 0.0
+        self.n_cf_ring: float = 0.0
+        self.n_cf_planet: float = 0.0
+        # "Ring1 Fixed, Carrier Output" (classic reduction):
+        self.n_rf_sun: float = 0.0
+        self.n_rf_carrier: float = 0.0
+        self.n_rf_ring: float = 0.0
+        self.n_rf_planet: float = 0.0
         # --- Check results ---
         self.checks: CheckResult = CheckResult()
 
@@ -129,25 +140,31 @@ class PGS:
     # ------------------------------------------------------------------ calc
     def calc(self) -> None:
         """Compute derived teeth counts, diameters and ratios."""
-        # type_diff is supplied directly via the UI ("diff" field) for the
-        # Wolfrom type; for the Simple type it stays at its 1.0 default.
-
-        # Ring tooth counts are decided in the zero-shift state: solve the
-        # layout with standard pitch circles (no shift factors) and round
-        # the ring teeth to integers, so both ring gears always have whole
-        # tooth numbers:
-        #   |zr1| = |zr2| + diff*Np
-        #   |zr2| = zp2 + dc0/m2        (ring2 internal mesh at carrier)
-        #   dc0   = m1*(zs1 + |zr1|)/2  (zero-shift carrier diameter)
-        # which reduces to
-        #   |zr1|*(m2 - m1/2) = m1*zs1/2 + m2*(zp2 + diff*Np)
-        denom = self.module2 - self.module1 / 2.0
-        numer = (self.module1 * self.zs1 / 2.0
-                 + self.module2 * (self.zp2 + self.type_diff * self.num_planets))
-        zr1_real = numer / denom
-        self.zr1 = -float(np.floor(zr1_real + 0.5))
-        self.zr2 = -float(np.floor(zr1_real - self.type_diff * self.num_planets + 0.5))
-        self.zp1 = (-self.zr1 - self.zs1) / 2
+        if self.is_wolfrom:
+            # type_diff is supplied directly via the UI ("diff" field).
+            #
+            # Ring tooth counts are decided in the zero-shift state: solve the
+            # layout with standard pitch circles (no shift factors) and round
+            # the ring teeth to integers, so both ring gears always have whole
+            # tooth numbers:
+            #   |zr1| = |zr2| + diff*Np
+            #   |zr2| = zp2 + dc0/m2       (ring2 internal mesh at carrier)
+            #   dc0   = m1*(zs1 + |zr1|)/2 (zero-shift carrier diameter)
+            # which reduces to
+            #   |zr1|*(m2 - m1/2) = m1*zs1/2 + m2*(zp2 + diff*Np)
+            denom = self.module2 - self.module1 / 2.0
+            numer = (self.module1 * self.zs1 / 2.0
+                     + self.module2 * (self.zp2 + self.type_diff * self.num_planets))
+            zr1_real = numer / denom
+            self.zr1 = -float(np.floor(zr1_real + 0.5))
+            self.zr2 = -float(np.floor(zr1_real - self.type_diff * self.num_planets + 0.5))
+            self.zp1 = (-self.zr1 - self.zs1) / 2
+        else:
+            # Simple: the Ring1 tooth count is entered directly in the UI
+            # (stored negative for the internal ring).  Stage-1 only:
+            #   |zr1| = zs1 + 2*zp1   ->   zp1 = (|zr1| - zs1)/2
+            self.zr1 = -float(np.floor(abs(self.zr1) + 0.5))
+            self.zp1 = (-self.zr1 - self.zs1) / 2
 
         self.ds1 = self.zs1 * self.module1
         self.dp1 = self.zp1 * self.module1
@@ -165,6 +182,28 @@ class PGS:
         else:
             self.g3 = round(1 - self.zr1 / self.zs1, ROUND_PRECISION)
             self.g4 = -round(-self.zr1 / self.zs1, ROUND_PRECISION)
+            self._calc_simple_speeds()
+
+    def _calc_simple_speeds(self) -> None:
+        """Stage-1 operating speeds [rpm] for the two Simple lockups."""
+        # Carrier fixed, Ring1 output (star train): the carrier is clamped at
+        # 0.  The external sun-planet mesh gives
+        #   n_p = -(zs/zp)*ns1,  then the internal planet-ring mesh gives
+        #   n_r = n_c + (zp/|zr|)*(n_p - n_c).
+        self.n_cf_sun = self.ns1
+        self.n_cf_carrier = 0.0
+        self.n_cf_planet = -self.ns1 / self.gp1s
+        self.n_cf_ring = round(
+            (self.zp1 / -self.zr1) * self.n_cf_planet,
+            ROUND_PRECISION)
+
+        # Ring1 fixed, carrier output (classic reduction):
+        #   n_c = ns1/g3,  n_p = n_c*(1 - |zr|/zp),  n_r = 0.
+        self.n_rf_sun = self.ns1
+        self.n_rf_carrier = self.ns1 / self.g3
+        self.n_rf_ring = 0.0
+        self.n_rf_planet = (
+            self.n_rf_carrier * (1.0 - (-self.zr1) / self.zp1))
 
     def _calc_stage2(self) -> None:
         # Ring2 keeps its integer tooth count from calc(); the stage-2
@@ -282,6 +321,18 @@ class PGS:
               self.g3 ** 2, " (2-stages),  ", self.g3 ** 3, " (3-stages)")
         print("Ratio (Total, Ring1 Output) = ", self.g4, " (1-stage),  ",
               self.g4 ** 2, " (2-stages),  ", self.g4 ** 3, " (3-stages)")
+        self._print_speed(
+            "(Carrier Fixed, Ring1 Output)",
+            [("Input Gear Speed (Gs1)", self.n_cf_sun),
+             ("Carrier Speed", self.n_cf_carrier),
+             ("Ring Gear Speed (Gr1)", self.n_cf_ring),
+             ("Planet Gear Speed (Gp1)", self.n_cf_planet)])
+        self._print_speed(
+            "(Ring1 Fixed, Carrier Output)",
+            [("Input Gear Speed (Gs1)", self.n_rf_sun),
+             ("Carrier Speed", self.n_rf_carrier),
+             ("Ring Gear Speed (Gr1)", self.n_rf_ring),
+             ("Planet Gear Speed (Gp1)", self.n_rf_planet)])
         print("### Size")
         print("Sun = ", self.ds1, " [mm],  ", self.zs1, " [ea]")
         print("Planet1 = ", self.dp1, " [mm],  ", self.zp1, " [ea]")

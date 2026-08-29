@@ -15,18 +15,26 @@ import os
 import sys
 import tkinter as tk
 import tkinter.font as font
+from dataclasses import replace
+from tkinter import filedialog
 from tkinter import ttk
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+import FGPG2_CLI
 from CPG import CPG
 from GPG import GPG
 from PGS import PGS
 
-RESULT_DIR = "./Result"
 DEFAULT_SCALE = 0.7
 PLOT_DPI = 100
+PGS_FIGURE = "PGS"
+
+# Per-gear result generation uses the FGPG2 gear generator that has been
+# ported into this project (the ``fgpg2`` package + ``FGPG2_CLI.py``): it
+# writes Result.csv, Result.dxf, Result1.png and Result2.png next to the
+# gear's Inputs.csv, with no external installation required.
 
 GEAR_ORDER = ["Gs1", "Gp1", "Gr1", "Gs2", "Gp2", "Gr2"]
 RING_GEARS = {"Gr1", "Gr2"}
@@ -55,6 +63,7 @@ DEFAULT_INPUTS = {
     "m2": 1.2,
     "Np": 3,
     "Zp2": 20.0,
+    "Zr1": 36.0,
     "Zs1": 12,
     "Ns1": 1000.0,
     "Gs1X": 0.4,
@@ -78,7 +87,8 @@ PLANETARY_INPUTS = [
     ("m1", "Module1, m1", "[mm] > 0", False),
     ("m2", "Module2, m2", "[mm] > 0", False),
     ("Np", "Planets number, Np", "[ea] > 2", False),
-    ("Zp2", "Planet2 Teeth, Zp2", "[ea] > 0", False),
+    ("Zp2", "Planet2 Teeth, Zp2", "", False),
+    ("Zr1", "Ring1 Teeth, Zr1", "", False),
     ("Zs1", "Sun1 Teeth, Zs1", "[ea] > 0", False),
     ("Ns1", "Input speed, ns1", "[rpm]", False),
 ]
@@ -109,6 +119,16 @@ PLOT_OPTIONS = [label for label, _ in PLOT_ITEMS]
 PLOT_LABEL_TO_CODE = {label: code for label, code in PLOT_ITEMS}
 PLOT_CODE_TO_LABEL = {code: label for label, code in PLOT_ITEMS}
 
+# Stage-1 plot options only (used when TYPE == Simple): the stage-2 and
+# combined options do not apply to a simple gear set.
+PLOT_ITEMS_SIMPLE = [
+    ("Gs1", 11),
+    ("Gp1", 12),
+    ("Gr1", 13),
+    ("Stage1", 1),
+]
+PLOT_OPTIONS_SIMPLE = [label for label, _ in PLOT_ITEMS_SIMPLE]
+
 # Tooth profile selection: label -> generator class.
 TOOTH_ITEMS = [
     ("Involute Teeth", GPG),
@@ -136,6 +156,7 @@ textbox: tk.Text
 P1: PGS
 gears: dict[str, GPG | CPG]
 gears_second: dict[str, GPG | CPG] | None = None
+save_button: ttk.Button | None = None
 
 
 # ---------------------------------------------------------------- parameters
@@ -149,6 +170,26 @@ def copy_gear_factors(target_gears, module, b, a, d, angle, c, e):
         gear.pressure_angle = angle
         gear.hob_tip_radius_factor = c
         gear.tooth_tip_radius_factor = e
+
+
+def _apply_params(g: dict[str, GPG | CPG]) -> None:
+    """Apply the current input values (modules, factors, shifts) to ``g``."""
+    module1 = float(entries["m1"].get())
+    module2 = float(entries["m2"].get())
+    b = float(entries["B"].get())
+    a = float(entries["A"].get())
+    d = float(entries["D"].get())
+    angle = float(entries["alpha"].get())
+    c = float(entries["C"].get())
+    e = float(entries["E"].get())
+    copy_gear_factors((g["Gs1"], g["Gp1"], g["Gr1"]),
+                      module1, b, a, d, angle, c, e)
+    g["Gs1"].shift_factor = float(entries["Gs1X"].get())
+    g["Gp1"].shift_factor = float(entries["Gp1X"].get())
+    if P1.is_wolfrom:
+        copy_gear_factors((g["Gs2"], g["Gp2"], g["Gr2"]),
+                          module2, b, a, d, angle, c, e)
+        g["Gp2"].shift_factor = float(entries["Gp2X"].get())
 
 
 def read_parameters() -> None:
@@ -174,32 +215,18 @@ def read_parameters() -> None:
     P1.module1 = float(entries["m1"].get())
     P1.module2 = float(entries["m2"].get())
     P1.num_planets = int(entries["Np"].get())
-    P1.zp2 = float(entries["Zp2"].get())
+    if is_wolfrom:
+        P1.zp2 = float(entries["Zp2"].get())
+    else:
+        P1.zr1 = -abs(float(entries["Zr1"].get()))
     P1.zs1 = float(entries["Zs1"].get())
     P1.ns1 = float(entries["Ns1"].get())
     P1.shift_s1 = float(entries["Gs1X"].get())
     P1.shift_p1 = float(entries["Gp1X"].get())
     P1.pressure_angle = float(entries["alpha"].get())
 
-    module1 = float(entries["m1"].get())
-    module2 = float(entries["m2"].get())
-    b = float(entries["B"].get())
-    a = float(entries["A"].get())
-    d = float(entries["D"].get())
-    angle = float(entries["alpha"].get())
-    c = float(entries["C"].get())
-    e = float(entries["E"].get())
-
     for g in [gears] + ([gears_second] if gears_second else []):
-        copy_gear_factors((g["Gs1"], g["Gp1"], g["Gr1"]),
-                          module1, b, a, d, angle, c, e)
-        g["Gs1"].shift_factor = float(entries["Gs1X"].get())
-        g["Gp1"].shift_factor = float(entries["Gp1X"].get())
-
-        if P1.is_wolfrom:
-            copy_gear_factors((g["Gs2"], g["Gp2"], g["Gr2"]),
-                              module2, b, a, d, angle, c, e)
-            g["Gp2"].shift_factor = float(entries["Gp2X"].get())
+        _apply_params(g)
 
 
 def _ring_shift_factor(zp, xp, zr, module, dc, alpha_deg):
@@ -324,47 +351,123 @@ def _plot_gear(key: str, g: dict, *, color, pitch_style, sun_angle: float) -> No
         plt.plot(gear.pitch_circle_x, gear.pitch_circle_y, pitch_style)
 
 
-def plot_pgs() -> None:
-    """Render the planetary gear set figure and save the PNG."""
-    plt.figure("PGS", figsize=(6, 6))
-    plt.clf()
-    option = PLOT_LABEL_TO_CODE[entries["PlotOption"].get()]
-    keys = _PLOT_CODE_KEYS.get(option, _PLOT_CODE_KEYS[3])
+def _profile_set(cls: type) -> dict[str, GPG | CPG]:
+    """Build, finalize and calculate a throwaway gear set of profile ``cls``."""
+    s = {name: cls() for name in GEAR_ORDER}
+    _apply_params(s)
+    finalize_parameters(s)
+    for name in GEAR_ORDER[:3]:
+        s[name].calc()
+    if P1.is_wolfrom:
+        for name in GEAR_ORDER[3:]:
+            s[name].calc()
+    return s
 
-    # Cycloid (CPG) teeth use the brand colours; involute (GPG) keeps the
-    # original grey / black scheme.  "All" overlays both profiles.
-    def plot_set(g, is_cyc):
+
+def _draw(keys: list[str], sets: list[tuple[dict, bool]],
+          out_path: str | None) -> None:
+    """Draw ``keys`` from each ``(gear set, is_cycloid)`` pair on one figure.
+
+    Saves the figure to ``out_path``, or shows it interactively when
+    ``out_path`` is None (preview).
+    """
+    plt.figure(PGS_FIGURE, figsize=(6, 6))
+    plt.clf()
+    # Sun rotation that keeps the sun teeth meshing with the planet array.
+    sun_angle = 0.0
+    first = sets[0][0]
+    if first["Gp1"].teeth % 2 == 0:
+        sun_angle = (2 * np.pi / first["Gs1"].teeth) / 2
+    for g, is_cyc in sets:
+        # Cycloid (CPG) teeth use the brand colours; involute (GPG) keeps
+        # the original grey / black scheme.
         color1 = "#95c4ed" if is_cyc else "dimgray"
         color2 = "#19609d" if is_cyc else "black"
-        # Sun rotation that keeps the sun teeth meshing with the planet array.
-        sun_angle = 0.0
-        if g["Gp1"].teeth % 2 == 0:
-            sun_angle = (2 * np.pi / g["Gs1"].teeth) / 2
         for key in keys:
             color = color1 if key in ("Gs1", "Gp1", "Gr1") else color2
             pitch_style = "r:" if key in ("Gs1", "Gp1", "Gr1") else "r--"
             _plot_gear(key, g, color=color, pitch_style=pitch_style,
                        sun_angle=sun_angle)
 
-    plot_set(gears, isinstance(gears.get("Gp1"), CPG))
-    if gears_second is not None:
-        plot_set(gears_second, isinstance(gears_second.get("Gp1"), CPG))
-
     # Carrier circle: the orbit of the planet gear centres.
     theta = np.linspace(0, 2 * np.pi, 361)
     carrier_radius = P1.dc / 2.0
     plt.plot(carrier_radius * np.cos(theta), carrier_radius * np.sin(theta),
              color="lightgray", linestyle="--", linewidth=1)
-
     plt.axis("equal")
     plt.grid(True)
-    out_name = {
-        1: "/PGS1.png", 2: "/PGS2.png", 3: "/PGS.png",
-        11: "/Gs1.png", 12: "/Gp1.png", 13: "/Gr1.png",
-        22: "/Gp2.png", 23: "/Gr2.png",
-    }[option]
-    plt.savefig(RESULT_DIR + out_name, dpi=PLOT_DPI)
-    plt.show()
+    if out_path is not None:
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        plt.savefig(out_path, dpi=PLOT_DPI)
+        plt.close(plt.gcf())
+    else:
+        plt.show()
+
+
+def _profile_variant_sets() -> tuple[dict, dict | None]:
+    """Return the (involute, cycloid) gear sets for the current design.
+
+    The cycloid set may be None when its profile cannot be generated (e.g.
+    a Wolfrom design with a non-integer ``Zs2``).
+    """
+    if isinstance(gears.get("Gs1"), GPG):
+        involute = gears
+    else:
+        involute = _profile_set(GPG)
+    if isinstance(gears.get("Gs1"), CPG):
+        cycloid = gears
+    elif isinstance(gears_second, dict) and isinstance(gears_second.get("Gs1"), CPG):
+        cycloid = gears_second
+    else:
+        try:
+            cycloid = _profile_set(CPG)
+        except Exception as e:
+            cycloid = None
+            print("WARN: cycloid profile generation failed ("
+                  + type(e).__name__ + ": " + str(e) + "); cycloid PNGs "
+                  "and the combined overlays are skipped.")
+    return involute, cycloid
+
+
+def save_pngs(out_dir: str) -> None:
+    """Render and save every required PNG into ``out_dir``.
+
+    3K-Wolfrom saves ``Involute_*``/``Cycloid_*``/``All_*`` for the Total,
+    Stage1, Stage2 and per-gear scopes; Simple saves the stage-1 set only.
+    The ``All_*`` images overlay the involute and cycloid profiles.
+    """
+    involute, cycloid = _profile_variant_sets()
+    if P1.is_wolfrom:
+        scopes = [("Total", 3), ("Stage1", 1), ("Stage2", 2),
+                  ("Gs1", 11), ("Gp1", 12), ("Gr1", 13),
+                  ("Gp2", 22), ("Gr2", 23)]
+    else:
+        scopes = [("Stage1", 1), ("Gs1", 11), ("Gp1", 12), ("Gr1", 13)]
+
+    for scope, code in scopes:
+        _draw(_PLOT_CODE_KEYS[code], [(involute, False)],
+              os.path.join(out_dir, f"Involute_{scope}.png"))
+    if cycloid is not None:
+        for scope, code in scopes:
+            _draw(_PLOT_CODE_KEYS[code], [(cycloid, True)],
+                  os.path.join(out_dir, f"Cycloid_{scope}.png"))
+        # The combined overlay image is produced for the whole set
+        # (All_Total for Wolfrom, All_Stage1 for Simple) and for each gear.
+        whole = [("Total", 3)] if P1.is_wolfrom else [("Stage1", 1)]
+        gear_scopes = [(s, c) for s, c in scopes if c >= 11]
+        for scope, code in whole + gear_scopes:
+            _draw(_PLOT_CODE_KEYS[code], [(involute, False), (cycloid, True)],
+                  os.path.join(out_dir, f"All_{scope}.png"))
+
+
+def plot_pgs() -> None:
+    """Interactive preview of the chosen PlotOption (no file output)."""
+    code = PLOT_LABEL_TO_CODE[entries["PlotOption"].get()]
+    keys = _PLOT_CODE_KEYS.get(code, _PLOT_CODE_KEYS[3])
+    sets = [(gears, isinstance(gears.get("Gp1"), CPG))]
+    if isinstance(gears_second, dict):
+        sets.append((gears_second, isinstance(gears_second.get("Gp1"), CPG)))
+    _draw(keys, sets, None)
 
 
 # ----------------------------------------------------------- report builder
@@ -403,13 +506,16 @@ def _append_inputs(lines: list[str]) -> None:
     if P1.is_wolfrom:
         lines.append("* Module2, m2 = " + str(float(P1.module2)) + "\n")
     lines.append("* Planets Number, Np = " + str(int(P1.num_planets)) + "\n")
-    lines.append("* Planet2 Teeth, Zp2 = " + str(P1.zp2) + "\n")
-    lines.append("* Sun1 Teeth, Zs1 = " + str(int(P1.zs1)) + "\n")
     if P1.is_wolfrom:
-        lines.append("* Input Speed, ns1 = " + str(float(P1.ns1)) + "\n")
+        lines.append("* Planet2 Teeth, Zp2 = " + str(P1.zp2) + "\n")
+    else:
+        lines.append("* Ring1 Teeth, Zr1 = " + str(P1.zr1) + "\n")
+    lines.append("* Sun1 Teeth, Zs1 = " + str(int(P1.zs1)) + "\n")
+    lines.append("* Input Speed, ns1 = " + str(float(P1.ns1)) + "\n")
     lines.append("* Shift Factor, Gs1.X = " + str(float(gears["Gs1"].shift_factor)) + "\n")
     lines.append("* Shift Factor, Gp1.X = " + str(float(gears["Gp1"].shift_factor)) + "\n")
-    lines.append("* Shift Factor, Gp2.X = " + str(float(gears["Gp2"].shift_factor)) + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Shift Factor, Gp2.X = " + str(float(gears["Gp2"].shift_factor)) + "\n")
     lines.append("* Backlash Factor, B = " + str(float(gears["Gs1"].backlash_factor)) + "\n")
     lines.append("* Addendum Factor, A = " + str(float(gears["Gs1"].addendum_factor)) + "\n")
     lines.append("* Dedendum Factor, D = " + str(float(gears["Gs1"].dedendum_factor)) + "\n")
@@ -444,7 +550,6 @@ def _append_wolfrom(lines: list[str]) -> None:
     lines.append("* Ratio Total (Carrier Fixed, Ring2 Output) = " + str(P1.g2) + "\n")
     lines.append("* Ratio Total (Type-3K : Carrier Free, Ring2 Output) = "
                 + str(P1.g22) + " = " + fraction + "\n\n")
-    lines.append("* Direction, sign = + / - : co-rotating / counter-rotating relative to Gs1\n")
     lines.append(_speed_lines(
         "### Speed (Type-3K : Carrier Free, Ring2 Output)",
         [("Input Gear Speed (Gs1)", P1.ns1),
@@ -487,6 +592,18 @@ def _append_simple(lines: list[str]) -> None:
     lines.append("* Ratio (Total, Ring1 Output) (1-stage) = " + str(P1.g4) + "\n")
     lines.append("* Ratio (Total, Ring1 Output) (2-stages) = " + str(P1.g4 ** 2) + "\n")
     lines.append("* Ratio (Total, Ring1 Output) (3-stages) = " + str(P1.g4 ** 3) + "\n\n")
+    lines.append(_speed_lines(
+        "### Speed (Carrier Fixed, Ring1 Output)",
+        [("Input Gear Speed (Gs1)", P1.n_cf_sun),
+         ("Carrier Speed", P1.n_cf_carrier),
+         ("Ring Gear Speed (Gr1)", P1.n_cf_ring),
+         ("Planet Gear Speed (Gp1)", P1.n_cf_planet)]))
+    lines.append(_speed_lines(
+        "### Speed (Ring1 Fixed, Carrier Output)",
+        [("Input Gear Speed (Gs1)", P1.n_rf_sun),
+         ("Carrier Speed", P1.n_rf_carrier),
+         ("Ring Gear Speed (Gr1)", P1.n_rf_ring),
+         ("Planet Gear Speed (Gp1)", P1.n_rf_planet)]))
     lines.append("### Size\n")
     lines.append("* Sun1 = " + str(P1.ds1) + " [mm],  " + str(P1.zs1) + " [ea]\n")
     lines.append("* Planet1 = " + str(P1.dp1) + " [mm],  " + str(P1.zp1) + " [ea]\n")
@@ -524,7 +641,7 @@ def build_report() -> None:
     """Compose the Markdown report and place it into the textbox."""
     lines: list[str] = []
     lines.append("# PGS - Planetary Gear Sizing Program\n\n")
-    lines.append("![](./PGS.png)\n\n")
+    lines.append("![](./" + ("All_Total.png" if P1.is_wolfrom else "All_Stage1.png") + ")\n\n")
     _append_checks(lines)
     _append_inputs(lines)
     if P1.is_wolfrom:
@@ -562,42 +679,120 @@ def _gear_csv_rows(name: str, gear: GPG) -> list[tuple[str, object]]:
     ]
 
 
-def save_output() -> None:
-    """Write the Markdown report and per-gear CSV inputs to ``RESULT_DIR``."""
-    os.makedirs(RESULT_DIR, exist_ok=True)
-    with open(RESULT_DIR + "/PGS.md", "w") as f:
+def _generate_fgpg2_results(folder: str, profile: str = "involute") -> None:
+    """Regenerate Result.csv/.dxf/Result1.png/Result2.png for one gear.
+
+    Runs the ported FGPG2 generator in-process on the gear's ``Inputs.csv``
+    (identical to ``python FGPG2_CLI.py <gear>/Inputs.csv <profile>``), so the
+    four result files land next to the input CSV.
+    """
+    csv_path = os.path.abspath(folder + "/Inputs.csv")
+    p = FGPG2_CLI.load_params(csv_path)
+    p = replace(p, profile=profile)
+    FGPG2_CLI.generate(p, folder)
+
+
+def save_output(out_dir: str) -> None:
+    """Write the Markdown report and per-gear result files into ``out_dir``."""
+    os.makedirs(out_dir, exist_ok=True)
+    with open(out_dir + "/README.md", "w") as f:
         f.write(textbox.get("0.0", "end"))
-    for name in GEAR_ORDER if P1.is_wolfrom else GEAR_ORDER[:3]:
-        folder = RESULT_DIR + "/" + name
+    # Gear folders: the Stage-1 gears always, Stage-2 Gp2/Gr2 for the Wolfrom
+    # type only.  Gs2 is never exported.
+    names = GEAR_ORDER[:3] + GEAR_ORDER[4:] if P1.is_wolfrom else GEAR_ORDER[:3]
+    for name in names:
+        folder = out_dir + "/" + name
         os.makedirs(folder, exist_ok=True)
-        with open(folder + "/Inputs.csv", "w") as f:
-            for key, value in _gear_csv_rows(name, gears[name]):
-                f.write(f"{key},{value}\n")
+        _write_gear_csv(folder + "/Inputs.csv", name)
+        # Per-profile result subfolders: Involute/ and Cycloid/ carry FGPG2's
+        # Result.csv/.dxf/Result1.png/Result2.png for the matching profile.
+        for profile in ("involute", "cycloid"):
+            sub = folder + "/" + profile.capitalize()
+            os.makedirs(sub, exist_ok=True)
+            _write_gear_csv(sub + "/Inputs.csv", name)
+            _generate_fgpg2_results(sub, profile)
+
+
+def _write_gear_csv(path: str, name: str) -> None:
+    with open(path, "w") as f:
+        for key, value in _gear_csv_rows(name, gears[name]):
+            f.write(f"{key},{value}\n")
 
 
 # ---------------------------------------------------------------- callbacks
 def toggle_simple_fields() -> None:
-    """Disable Wolfrom-only fields when the Simple Type is selected."""
+    """Disable Wolfrom-only fields when the Simple Type is selected.
+
+    For the Simple type the Planet2 (Wolfrom stage-2) input is replaced by
+    a Ring1 tooth-count input and only the stage-1 plot options stay usable.
+    """
     is_simple = entries["TYPE"].get() == "Simple"
+    if is_simple:
+        entries["Zp2"].grid_remove()
+        entries["Zp2_LABEL"].grid_remove()
+        entries["Zr1"].grid()
+        entries["Zr1_LABEL"].grid()
+    else:
+        entries["Zp2"].grid()
+        entries["Zp2_LABEL"].grid()
+        entries["Zr1"].grid_remove()
+        entries["Zr1_LABEL"].grid_remove()
     state = "disabled" if is_simple else "normal"
-    entries["Zp2"].configure(state=state)
     entries["m2"].configure(state=state)
     entries["Gp2X"].configure(state=state)
-    entries["Ns1"].configure(state=state)
     if is_simple:
         entries["DIFF"].grid_remove()
         entries["DIFF_HINT"].grid_remove()
+        entries["DIFF_LABEL"].grid_remove()
     else:
         entries["DIFF"].grid()
         entries["DIFF_HINT"].grid()
+        entries["DIFF_LABEL"].grid()
+    plot_cb = entries["PlotOption"]
+    if is_simple:
+        plot_cb.configure(values=PLOT_OPTIONS_SIMPLE)
+        if plot_cb.get() not in PLOT_OPTIONS_SIMPLE:
+            plot_cb.set("Stage1")
+    else:
+        plot_cb.configure(values=PLOT_OPTIONS)
 
 
 def button_run_callback() -> None:
+    """Compute, show the report text and plot the preview (no file output)."""
     read_parameters()
     run_calc()
     build_report()
-    save_output()
     plot_pgs()
+
+
+def button_save_callback() -> None:
+    """Save the result files into a user-selected folder.
+
+    The Save button is disabled for the duration of the operation.  Asks for
+    the parent directory first, then creates a ``Result`` folder under it and
+    writes the report, per-gear CSV/DXF/PNG files and the plot PNGs.  Also
+    (re)runs the calculation so the saved files always match the inputs.
+    """
+    global save_button
+    if save_button is not None:
+        save_button.configure(state="disabled")
+        app.update_idletasks()
+    try:
+        folder = filedialog.askdirectory(
+            title="Select the folder where the Result directory will be created")
+        if not folder:
+            return
+        out_dir = os.path.join(folder, "Result")
+        read_parameters()
+        run_calc()
+        build_report()
+        save_output(out_dir)
+        save_pngs(out_dir)
+        print("Result files saved in " + out_dir)
+    finally:
+        if save_button is not None:
+            save_button.configure(state="normal")
+            app.update_idletasks()
 
 
 def button_exit_callback() -> None:
@@ -676,8 +871,9 @@ def _configure_style(style: ttk.Style, title_font, section_font) -> None:
 
 def _build_field(parent, row, key, label_text, hint_text, hint_below) -> int:
     """Add one labelled input row inside ``parent``; return next free row."""
-    ttk.Label(parent, text=label_text, style="Card.TLabel").grid(
-        row=row, column=0, padx=(0, PADX), pady=PADY, sticky="e")
+    lbl = ttk.Label(parent, text=label_text, style="Card.TLabel")
+    lbl.grid(row=row, column=0, padx=(0, PADX), pady=PADY, sticky="e")
+    entries[key + "_LABEL"] = lbl
     if key == "TYPE":
         entry = ttk.Combobox(parent, values=TYPE_LABELS,
                              width=20, state="readonly")
@@ -737,12 +933,12 @@ def _build_result_panel(parent) -> None:
     textbox.insert("end", "\n #")
     textbox.insert("end", "\n ########################################")
     textbox.insert("end", "\n\n 1. Input Parameters.")
-    textbox.insert("end", "\n 2. Press Run.")
+    textbox.insert("end", "\n 2. Press Run to compute & plot, then Save to write the result files into a folder you choose.")
 
 
 def build_gui() -> None:
     """Create the themed application window and lay out the widgets."""
-    global app
+    global app, save_button
     app = tk.Tk()
     app.title("PGS — Planetary Gear Sizing")
     app.configure(background=BG)
@@ -804,6 +1000,9 @@ def build_gui() -> None:
     bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(PAD, 0))
     ttk.Button(bar, text="Exit", style="Danger.TButton",
                command=button_exit_callback).pack(side="right", padx=(0, PAD))
+    save_button = ttk.Button(bar, text="Save", style="Accent.TButton",
+                             command=button_save_callback)
+    save_button.pack(side="right", padx=(0, PAD))
     ttk.Button(bar, text="Run", style="Accent.TButton",
                command=button_run_callback).pack(side="right", padx=(0, PAD))
 
