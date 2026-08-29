@@ -399,8 +399,8 @@ n_{r2} = \frac{n_{p}}{g_{r2p2}} = \frac{n_{s1}}{g_2}
 ```math
 \boxed{
 \begin{gathered}
-x_r = \frac{(Z_r - Z_p)\,\big(\operatorname{inv}\alpha_0 - \operatorname{inv}\alpha'\big)}{2\tan\alpha_0} - x_p,\\[4pt]
-\operatorname{inv}\alpha \equiv \tan\alpha - \alpha
+x_r = \frac{(Z_r - Z_p)\,\big(\mathrm{inv}\,\alpha_0 - \mathrm{inv}\,\alpha'\big)}{2\tan\alpha_0} - x_p,\\[4pt]
+\mathrm{inv}\,\alpha \equiv \tan\alpha - \alpha
 \end{gathered}
 }
 ```
