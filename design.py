@@ -89,9 +89,9 @@ PLANETARY_INPUTS = [
     ("m1", "Module1, m1", "[mm] > 0", False),
     ("m2", "Module2, m2", "[mm] > 0", False),
     ("Zs1", "Sun1 Teeth, Zs1", "[ea] > 0", False),
-    ("Zr1", "Ring1 Teeth, Zr1", "", False),
-    ("Zp2", "Planet2 Teeth, Zp2", "", False),
-    ("Zr2", "Ring2 Teeth, Zr2", "", False),
+    ("Zr1", "Ring1 Teeth, Zr1", "[ea] > 0", False),
+    ("Zp2", "Planet2 Teeth, Zp2", "[ea] > 0", False),
+    ("Zr2", "Ring2 Teeth, Zr2", "[ea] > 0", False),
     ("Ns1", "Input speed, ns1", "[rpm]", False),
 ]
 
