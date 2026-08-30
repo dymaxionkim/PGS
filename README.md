@@ -89,10 +89,25 @@ Or use the platform launcher:
 | Plot option | Scope of the interactive preview: `Stage1` / `Stage2` / `Total`, or a single gear: `Gs1`, `Gp1`, `Gr1` (stage 1), `Gp2`, `Gr2` (stage 2) — only the selected layout is drawn. Simple offers the stage-1 options only. The saved images always cover every applicable scope (see "Result files") |
 | Teeth profile | `Involute Teeth` (GPG) / `Cycloid Teeth` (CPG), or **`All`** to overlay both profiles in one plot (involute grey/black, cycloid blue) |
 
-### Run vs Save
+### Run vs Load vs Save
 
 - **Run** computes the gearbox, fills the result panel and shows the plot preview of the selected Plot option (no files are written).
-- **Save** re-runs the calculation, asks which folder to use (directory picker), then creates a `Result` directory inside it and writes every output file.
+- **Load** asks for a `README.md` file (e.g. a previously saved `Result/README.md`), reads its `## Input Parameters` section, refills the input widgets (ring tooth counts are stored negative in the report and converted back to the positive numbers the fields expect), and runs the calculation like **Run**. It is the way to reopen and continue a saved design.
+- **Save** re-runs the calculation, asks which folder to use (directory picker), then creates a `Result` directory inside it and writes every output file — including the `Result/README.md` that **Load** reads back.
+
+### Command line (headless)
+
+`PGS_CLI.py` re-runs a saved design without the GUI — it reads the `## Input Parameters` section of a Markdown report, performs the exact same calculation as **Run**, and exports every result file next to the input file:
+
+```
+uv run PGS_CLI.py <README.md> [SaveAll|SaveOK]
+```
+
+- `<README.md>` — path to a Markdown file carrying the `## Input Parameters` section (e.g. `Result/README.md`).
+- `SaveAll` (default when omitted) — writes the report `README.md`, the `Involute_*`/`Cycloid_*`/`All_*.png` drawings, and the per-gear folders (`Gs1`/`Gp1`/`Gr1`[`/Gp2`/`Gr2`] with `Involute`/`Cycloid` inside), all **in the same folder as the input file**, with the same layout as GUI **Save**.
+- `SaveOK` — skips writing anything when the regenerated `## Check Geometrical Conditions` contains a `Fail` status.
+
+Note: since the report is written as `README.md` in the input file's folder, an input file that is itself named `README.md` will be overwritten by the regenerated report.
 
 ### Result files
 
@@ -145,6 +160,7 @@ The result panel displays:
 | `GPG.py` | Generic involute gear profile generation (external/internal gears) |
 | `CPG.py` | Cycloidal gear profile generator, drop-in replacement sharing the `GPG` interface |
 | `FGPG2_CLI.py` | Bundled FGPG2 CLI entry (`FGPG2_CLI.py <Inputs.csv> [involute\|cycloid]`) that regenerates the per-gear Result files |
+| `PGS_CLI.py` | Headless CLI runner (`PGS_CLI.py <README.md> [SaveAll\|SaveOK]`) — runs the same calculation as **Run** from a report's `## Input Parameters` and exports all files next to it |
 | `fgpg2/` | Ported FGPG2 generator package (`gear.py`, `cycloid.py`, `exporters.py`, `plotter.py`) used in-process to write `Result.csv` / `Result.dxf` / `Result1.png` / `Result2.png` |
 | `PGS.bat` / `PGS.sh` | Platform launcher scripts |
 

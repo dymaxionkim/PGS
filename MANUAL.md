@@ -28,6 +28,7 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 | `GPG.py` | 인볼루트 치형 프로파일 생성기 (외/내접 기어 공용) |
 | `CPG.py` | 사이클로이드 치형 프로파일 생성기 (`GPG`와 동일 인터페이스의 교체용 모듈) |
 | `FGPG2_CLI.py` | 이식된 FGPG2 CLI 진입점 (`FGPG2_CLI.py <Inputs.csv> [involute\|cycloid]`) — 기어별 Result 파일을 재생성 |
+| `PGS_CLI.py` | 명령줄(헤드리스) 실행기 — `.md` 리포트의 `## Input Parameters`를 읽어 GUI와 동일한 계산을 수행하고, SaveAll/SaveOK 옵션에 따라 결과 파일을 저장 (§2.9) |
 | `fgpg2/` | 프로젝트에 이식된 FGPG2 치형 생성 패키지 (`gear.py`, `cycloid.py`, `exporters.py`, `plotter.py`) — Save 시 `Result.csv`/`Result.dxf`/`Result1.png`/`Result2.png`를 인프로세스로 생성 |
 | `PGS.bat` / `PGS.sh` | OS별 실행 스크립트 |
 
@@ -131,7 +132,7 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 
 > **참고 — 저장 시 산출 파일명**: `Plot option`과 무관하게 **전체 대상에 대해 도면을 모두 저장**한다. 파일명 규칙은 §2.6 Save 단계의 [결과 파일] 목록 참조.
 
-### 2.6 Step 5 — Run · Save 버튼 (계산 및 파일 저장)
+### 2.6 Step 5 — Run · Load · Save 버튼 (계산 · 재사용 · 파일 저장)
 
 **Run**을 누르면 계산·프리뷰만 수행되고 **파일은 저장되지 않는다**:
 
@@ -143,6 +144,11 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 6. 각 기어별 `GPG.calc()` — 6개 기어(또는 Simple은 3개)의 치형 점군 생성 (§3.7)
 7. `build_report()` — Markdown 보고서를 Result 패널에 표시
 8. `plot_pgs()` — 선택한 Plot option에 따라 인터랙티브 프리뷰만 표시 (Teeth profile이 `All`이면 두 치형 프로파일을 겹쳐 표시)
+
+**Load**를 누르면 **파일 선택 대화상자**가 열리고, 원하는 경로의 **`README.md`** 파일(`Result/README.md` 등)을 고르면 그 파일의 `## Input Parameters` 섹션을 읽어 **UI의 파라미터 입력창을 자동으로 다시 채운다**. 이어서 Run과 동일하게 `read_parameters → run_calc → build_report → plot_pgs`를 수행하므로, 이전에 Save로 저장한 설계를 즉시 불러와 같은 값을 확인·이어서 수정할 수 있다.
+
+> - 입력 파라미터 섹션이 없는 파일을 고르면 경고창이 뜨고 아무것도 바뀌지 않는다. `## Input Parameters` 섹션의 형식은 아래 [Save 결과 파일]의 `Result/README.md` 항목과 동일하다.
+> - 보고서에는 링기어 치수가 음수로 기록되므로(`-90.0`), 불러올 때는 입력창이 기대하는 양수 값(`90.0`)으로 자동 변환된다.
 
 **Save**를 누르면 폴더 선택 대화상자가 열리고, 선택한 폴더 아래에 `Result/`를 만들고 **동일 계산을 재실행**하여 모든 산출물을 저장한다 (저장 중에는 Save 버튼이 비활성화되고 완료 후 다시 활성화된다).
 
@@ -177,7 +183,22 @@ Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
 → 자동: 치수 배치 해(Zp1, Zs2), 기어비, 링 전위계수, 치형 도면
 → 기하 검사 6종(1단) 통과 여부 확인 → 미달이면 입력 변경 후 재실행(반복)
 → 전부 OK면 Save → 선택 폴더에 Result/ 생성 (README.md · 도면 PNG · 기어별 CSV·FGPG2 산출물)
+→ 이후 이어서 설계할 때는 Load로 이전 Result/README.md 선택 → 파라미터 자동 재입력
+→ 헤드리스 재계산·재저장은 CLI PGS_CLI.py <README.md> [SaveAll|SaveOK] 로 (§2.9)
 ```
+
+### 2.9 명령줄(CLI) 실행 — `PGS_CLI.py`
+
+GUI를 띄우지 않고도 **GUI Save와 동일한 계산·저장**을 수행할 수 있다:
+
+```bash
+uv run PGS_CLI.py <README.md> [SaveAll|SaveOK]
+```
+
+- `<README.md>` — `## Input Parameters` 섹션을 가진 마크다운 파일 경로(예: `Result/README.md`). 이 섹션에서 Type·치수·전위·백래시 등을 읽어 GUI `Run`과 동일한 계산을 수행한다.
+- `SaveAll`(기본값) 또는 **argument 생략** — 계산 결과(`README.md` 보고서 · `Involute_*/Cycloid_*/All_*.png` 도면)와 개별 기어 폴더(`Gs1`/`Gp1`/`Gr1`[·`Gp2`/`Gr2`] + `Involute`·`Cycloid` 산출물)를 `<README.md>`와 **같은 폴더**에 저장한다. 저장 구조는 GUI Save와 동일하다.
+- `SaveOK` — 새로 계산된 `## Check Geometrical Conditions`에 **"Fail" 상태가 하나라도 있으면 계산 결과·생성 파일을 저장하지 않는다**.
+- 저장되는 `README.md` 이름이 입력 파일과 같으면(`input.md` 외, 파일명이 `README.md`인 경우) **입력 보고서를 재생성 결과로 덮어쓴다**는 점에 유의한다.
 
 ---
 
@@ -707,6 +728,8 @@ Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B
 | Speed ② (Ring1 Fixed, Carrier Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +250 / +0 / −500 [rpm] |
 
 > 저장되는 결과 파일은 위 Wolfrom 예시와 마찬가지로 `Result/README.md`, `Involute_*/Cycloid_*/All_*` PNG(Simple은 12개), `Result/Gs1|Gp1|Gr1/` 기어 폴더 구조를 갖는다.
+>
+> CLI로 동일한 계산·저장을 재실행하려면 `uv run PGS_CLI.py Result/README.md SaveAll` (§2.9) 로 실행하면 된다.
 
 ## 부록 B. 제한 사항 및 주의
 

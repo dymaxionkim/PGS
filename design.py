@@ -12,11 +12,13 @@ Run with::
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tkinter as tk
 import tkinter.font as font
 from dataclasses import replace
 from tkinter import filedialog
+from tkinter import messagebox
 from tkinter import ttk
 
 import matplotlib.pyplot as plt
@@ -742,6 +744,115 @@ def toggle_simple_fields() -> None:
         plot_cb.configure(values=PLOT_OPTIONS)
 
 
+# Parameter-key mapping used by the Load button: the "## Input Parameters"
+# section of a saved Result/README.md is read back to refill the input
+# widgets.  The report labels (e.g. "Module1") are ignored; the keys match
+# the DEFAULT_INPUTS / PLANETARY_INPUTS keys.
+REPORT_KEY_TO_ENTRY = {
+    "TYPE": "TYPE",
+    "m1": "m1",
+    "m2": "m2",
+    "Np": "Np",
+    "Zr2": "Zr2",
+    "Zp2": "Zp2",
+    "Zr1": "Zr1",
+    "Zs1": "Zs1",
+    "ns1": "Ns1",
+    "Ns1": "Ns1",
+    "Gs1.X": "Gs1X",
+    "Gp1.X": "Gp1X",
+    "Gp2.X": "Gp2X",
+    "B": "B",
+    "A": "A",
+    "D": "D",
+    "alpha": "alpha",
+    "C": "C",
+    "E": "E",
+}
+
+
+def _parse_input_parameters(md_text: str) -> dict[str, str]:
+    """Extract key -> value pairs from the '## Input Parameters' section."""
+    values: dict[str, str] = {}
+    in_inputs = False
+    for line in md_text.splitlines():
+        if line.startswith("## "):
+            if line.strip() == "## Input Parameters":
+                in_inputs = True
+            elif in_inputs:
+                break
+        elif in_inputs and line.startswith("* "):
+            m = re.match(r"^\* .*?, ([\w.]+) = (.*)$", line.strip())
+            if m:
+                values[m.group(1)] = m.group(2).strip()
+    return values
+
+
+def _set_entry_text(key: str, value: str) -> None:
+    """Replace the text of an entry widget (clear then insert)."""
+    w = entries[key]
+    w.delete(0, "end")
+    w.insert(0, value)
+
+
+def button_load_callback() -> None:
+    """Load the inputs back from a saved Result README.md file.
+
+    Opens a file picker for a "README.md" result file, reads the
+    "## Input Parameters" section and refills the input widgets, then
+    runs the calculation exactly like the Run button.  Ring tooth counts
+    are stored negative in the report, so they are loaded back as the
+    positive numbers expected by the input fields.
+    """
+    path = filedialog.askopenfilename(
+        title="Select the README.md result file to load parameters from",
+        filetypes=[("README.md", "README.md"),
+                   ("Markdown files", "*.md"),
+                   ("All files", "*.*")])
+    if not path:
+        return
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        messagebox.showerror("Load Error",
+                             "Could not read the file:\n" + path)
+        return
+    values = _parse_input_parameters(text)
+    if not values:
+        messagebox.showwarning(
+            "Load Warning",
+            "The selected file does not contain a '## Input Parameters' "
+            "section.")
+        return
+    for key, value in values.items():
+        entry_key = REPORT_KEY_TO_ENTRY.get(key)
+        if entry_key is None or entry_key not in entries:
+            continue
+        if entry_key == "TYPE":
+            try:
+                code = int(value.split(",")[0].strip())
+            except ValueError:
+                continue
+            label = TYPE_CODE_TO_LABEL.get(code)
+            if label is None:
+                continue
+            entries["TYPE"].set(label)
+        elif entry_key in ("Zr1", "Zr2"):
+            try:
+                number = abs(float(value))
+            except ValueError:
+                continue
+            _set_entry_text(entry_key, str(number))
+        else:
+            _set_entry_text(entry_key, value)
+    toggle_simple_fields()
+    read_parameters()
+    run_calc()
+    build_report()
+    plot_pgs()
+
+
 def button_run_callback() -> None:
     """Compute, show the report text and plot the preview (no file output)."""
     read_parameters()
@@ -988,6 +1099,8 @@ def build_gui() -> None:
     save_button.pack(side="right", padx=(0, PAD))
     ttk.Button(bar, text="Run", style="Accent.TButton",
                command=button_run_callback).pack(side="right", padx=(0, PAD))
+    ttk.Button(bar, text="Load", style="Accent.TButton",
+               command=button_load_callback).pack(side="right", padx=(0, PAD))
 
 
 def main() -> None:
