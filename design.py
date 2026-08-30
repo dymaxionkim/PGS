@@ -12,11 +12,13 @@ Run with::
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tkinter as tk
 import tkinter.font as font
 from dataclasses import replace
 from tkinter import filedialog
+from tkinter import messagebox
 from tkinter import ttk
 
 import matplotlib.pyplot as plt
@@ -63,7 +65,7 @@ DEFAULT_INPUTS = {
     "m2": 1.2,
     "Np": 3,
     "Zp2": 20.0,
-    "Zr1": 36.0,
+    "Zr1": 90.0,
     "Zs1": 12,
     "Ns1": 1000.0,
     "Gs1X": 0.4,
@@ -77,19 +79,19 @@ DEFAULT_INPUTS = {
     "E": 0.01,
     "PlotOption": 3,
     "TeethType": "Involute Teeth",
-    "DIFF": 12.0,
+    "Zr2": 54.0,
 }
 
 # (key, label, hint, hint-on-next-row?)
 PLANETARY_INPUTS = [
     ("TYPE", "Type", "", False),
-    ("DIFF", "Teeth difference, diff", "Wolfrom only", True),
+    ("Np", "Planet number, Np", "[ea] > 2", False),
     ("m1", "Module1, m1", "[mm] > 0", False),
     ("m2", "Module2, m2", "[mm] > 0", False),
-    ("Np", "Planets number, Np", "[ea] > 2", False),
-    ("Zp2", "Planet2 Teeth, Zp2", "", False),
-    ("Zr1", "Ring1 Teeth, Zr1", "", False),
     ("Zs1", "Sun1 Teeth, Zs1", "[ea] > 0", False),
+    ("Zr1", "Ring1 Teeth, Zr1", "", False),
+    ("Zp2", "Planet2 Teeth, Zp2", "", False),
+    ("Zr2", "Ring2 Teeth, Zr2", "", False),
     ("Ns1", "Input speed, ns1", "[rpm]", False),
 ]
 
@@ -139,8 +141,8 @@ TOOTH_ALL_LABEL = "All"
 TOOTH_OPTIONS = [label for label, _ in TOOTH_ITEMS] + [TOOTH_ALL_LABEL]
 TOOTH_LABEL_TO_CLASS = dict(TOOTH_ITEMS)
 
-# Human-readable Type options: a free teeth-difference is entered manually
-# for the Wolfrom type, so only these two top-level choices remain.
+# Human-readable Type options: the Wolfrom type reads Zr2 (Ring2 Teeth)
+# directly instead of a teeth-difference, so only these two choices remain.
 TYPE_ITEMS = [
     ("Simple", 0),
     ("3K-Wolfrom", 1),
@@ -211,12 +213,13 @@ def read_parameters() -> None:
 
     is_wolfrom = entries["TYPE"].get() != "Simple"
     P1.gear_type = 1 if is_wolfrom else 0
-    P1.type_diff = float(entries["DIFF"].get()) if is_wolfrom else 1.0
     P1.module1 = float(entries["m1"].get())
     P1.module2 = float(entries["m2"].get())
     P1.num_planets = int(entries["Np"].get())
     if is_wolfrom:
         P1.zp2 = float(entries["Zp2"].get())
+        P1.zr2 = -abs(float(entries["Zr2"].get()))
+        P1.zr1 = -abs(float(entries["Zr1"].get()))
     else:
         P1.zr1 = -abs(float(entries["Zr1"].get()))
     P1.zs1 = float(entries["Zs1"].get())
@@ -475,31 +478,17 @@ def _append_checks(lines: list[str]) -> None:
     c = P1.checks
     lines.append("## Check Geometrical Conditions\n")
     lines.append("* Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : " + c.non_factorizing_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : " + c.non_factorizing_2 + "\n")
     lines.append("* Planet Numbers (Equal Distance Condition) 1 : " + c.equal_distance_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Planet Numbers (Equal Distance Condition) 2 : " + c.equal_distance_2 + "\n")
     lines.append("* Planets Interference (Non-Overlap Condition) 1 : " + c.planets_interference_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Planets Interference (Non-Overlap Condition) 2 : " + c.planets_interference_2 + "\n")
     lines.append("* Involute Interference Condition 1 : " + c.involute_interference_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Involute Interference Condition 2 : " + c.involute_interference_2 + "\n")
     lines.append("* Trimming Interference 1 : " + c.trimming_interference_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Trimming Interference 2 : " + c.trimming_interference_2 + "\n")
     lines.append("* Teeth Numbers which is Integer 1 : " + c.teeth_number_integer_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Teeth Numbers which is Integer 2 : " + c.teeth_number_integer_2 + "\n")
     lines.append("\n")
 
 
 def _append_inputs(lines: list[str]) -> None:
     lines.append("## Input Parameters\n")
     type_label = TYPE_CODE_TO_LABEL.get(int(P1.gear_type), "Unknown")
-    if P1.is_wolfrom:
-        type_label += " (diff=" + str(P1.type_diff) + ")"
     lines.append("* Type, TYPE = " + str(int(P1.gear_type)) + ", "
                  + type_label + "\n")
     lines.append("* Module1, m1 = " + str(float(P1.module1)) + "\n")
@@ -507,9 +496,9 @@ def _append_inputs(lines: list[str]) -> None:
         lines.append("* Module2, m2 = " + str(float(P1.module2)) + "\n")
     lines.append("* Planets Number, Np = " + str(int(P1.num_planets)) + "\n")
     if P1.is_wolfrom:
+        lines.append("* Ring2 Teeth, Zr2 = " + str(P1.zr2) + "\n")
         lines.append("* Planet2 Teeth, Zp2 = " + str(P1.zp2) + "\n")
-    else:
-        lines.append("* Ring1 Teeth, Zr1 = " + str(P1.zr1) + "\n")
+    lines.append("* Ring1 Teeth, Zr1 = " + str(P1.zr1) + "\n")
     lines.append("* Sun1 Teeth, Zs1 = " + str(int(P1.zs1)) + "\n")
     lines.append("* Input Speed, ns1 = " + str(float(P1.ns1)) + "\n")
     lines.append("* Shift Factor, Gs1.X = " + str(float(gears["Gs1"].shift_factor)) + "\n")
@@ -613,7 +602,8 @@ def _append_simple(lines: list[str]) -> None:
 
 
 def _append_gear_specs(lines: list[str]) -> None:
-    for name in GEAR_ORDER if P1.is_wolfrom else GEAR_ORDER[:3]:
+    for name in (GEAR_ORDER[:3] + GEAR_ORDER[4:]
+                 if P1.is_wolfrom else GEAR_ORDER[:3]):
         gear = gears[name]
         is_ring = name in RING_GEARS
         teeth_label = f"-{round(gear.teeth, 6)}" if is_ring else f"{round(gear.teeth, 6)}"
@@ -723,31 +713,28 @@ def _write_gear_csv(path: str, name: str) -> None:
 def toggle_simple_fields() -> None:
     """Disable Wolfrom-only fields when the Simple Type is selected.
 
-    For the Simple type the Planet2 (Wolfrom stage-2) input is replaced by
-    a Ring1 tooth-count input and only the stage-1 plot options stay usable.
+    For the Simple type the stage-2 inputs (m2, Gp2.X, Zr2, Zp2) are
+    hidden and only the stage-1 plot options stay usable.  The Ring1
+    tooth-count input (Zr1) stays available for both types.
     """
     is_simple = entries["TYPE"].get() == "Simple"
     if is_simple:
         entries["Zp2"].grid_remove()
         entries["Zp2_LABEL"].grid_remove()
+        entries["Zr2"].grid_remove()
+        entries["Zr2_LABEL"].grid_remove()
         entries["Zr1"].grid()
         entries["Zr1_LABEL"].grid()
     else:
         entries["Zp2"].grid()
         entries["Zp2_LABEL"].grid()
-        entries["Zr1"].grid_remove()
-        entries["Zr1_LABEL"].grid_remove()
+        entries["Zr2"].grid()
+        entries["Zr2_LABEL"].grid()
+        entries["Zr1"].grid()
+        entries["Zr1_LABEL"].grid()
     state = "disabled" if is_simple else "normal"
     entries["m2"].configure(state=state)
     entries["Gp2X"].configure(state=state)
-    if is_simple:
-        entries["DIFF"].grid_remove()
-        entries["DIFF_HINT"].grid_remove()
-        entries["DIFF_LABEL"].grid_remove()
-    else:
-        entries["DIFF"].grid()
-        entries["DIFF_HINT"].grid()
-        entries["DIFF_LABEL"].grid()
     plot_cb = entries["PlotOption"]
     if is_simple:
         plot_cb.configure(values=PLOT_OPTIONS_SIMPLE)
@@ -755,6 +742,133 @@ def toggle_simple_fields() -> None:
             plot_cb.set("Stage1")
     else:
         plot_cb.configure(values=PLOT_OPTIONS)
+
+
+# Parameter-key mapping used by the Load button: the "## Input Parameters"
+# section of a saved Result/README.md is read back to refill the input
+# widgets.  The report labels (e.g. "Module1") are ignored; the keys match
+# the DEFAULT_INPUTS / PLANETARY_INPUTS keys.
+REPORT_KEY_TO_ENTRY = {
+    "TYPE": "TYPE",
+    "m1": "m1",
+    "m2": "m2",
+    "Np": "Np",
+    "Zr2": "Zr2",
+    "Zp2": "Zp2",
+    "Zr1": "Zr1",
+    "Zs1": "Zs1",
+    "ns1": "Ns1",
+    "Ns1": "Ns1",
+    "Gs1.X": "Gs1X",
+    "Gp1.X": "Gp1X",
+    "Gp2.X": "Gp2X",
+    "B": "B",
+    "A": "A",
+    "D": "D",
+    "alpha": "alpha",
+    "C": "C",
+    "E": "E",
+}
+
+
+def _parse_input_parameters(md_text: str) -> dict[str, str]:
+    """Extract key -> value pairs from the '## Input Parameters' section."""
+    values: dict[str, str] = {}
+    in_inputs = False
+    for line in md_text.splitlines():
+        if line.startswith("## "):
+            if line.strip() == "## Input Parameters":
+                in_inputs = True
+            elif in_inputs:
+                break
+        elif in_inputs and line.startswith("* "):
+            m = re.match(r"^\* .*?, ([\w.]+) = (.*)$", line.strip())
+            if m:
+                values[m.group(1)] = m.group(2).strip()
+    return values
+
+
+def _set_entry_text(key: str, value: str) -> None:
+    """Replace the text of an entry widget (clear then insert)."""
+    w = entries[key]
+    w.delete(0, "end")
+    w.insert(0, value)
+
+
+def _apply_report_values(values: dict[str, str]) -> bool:
+    """Refill the input widgets from a report ``## Input Parameters`` map.
+
+    Returns False when the map carries no applicable parameter.  Ring tooth
+    counts are stored negative in the report, so they are loaded back as the
+    positive numbers expected by the input fields.
+    """
+    applied = False
+    for key, value in values.items():
+        entry_key = REPORT_KEY_TO_ENTRY.get(key)
+        if entry_key is None or entry_key not in entries:
+            continue
+        applied = True
+        if entry_key == "TYPE":
+            try:
+                code = int(value.split(",")[0].strip())
+            except ValueError:
+                continue
+            label = TYPE_CODE_TO_LABEL.get(code)
+            if label is None:
+                continue
+            entries["TYPE"].set(label)
+        elif entry_key in ("Zr1", "Zr2"):
+            try:
+                number = abs(float(value))
+            except ValueError:
+                continue
+            _set_entry_text(entry_key, str(number))
+        else:
+            _set_entry_text(entry_key, value)
+    return applied
+
+
+def load_parameters_from_file(path: str) -> bool:
+    """Load the inputs from a report file's ``## Input Parameters`` section.
+
+    Reads ``path`` and refills the input widgets; returns False when the
+    file cannot be read or carries no applicable parameter.  Used by the
+    Load button and by command-line startup (``python design.py <file>``).
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return False
+    values = _parse_input_parameters(text)
+    return _apply_report_values(values)
+
+
+def button_load_callback() -> None:
+    """Load the inputs back from a saved Result README.md file.
+
+    Opens a file picker for a "README.md" result file, reads the
+    "## Input Parameters" section and refills the input widgets, then
+    runs the calculation exactly like the Run button.
+    """
+    path = filedialog.askopenfilename(
+        title="Select the README.md result file to load parameters from",
+        filetypes=[("README.md", "README.md"),
+                   ("Markdown files", "*.md"),
+                   ("All files", "*.*")])
+    if not path:
+        return
+    if not load_parameters_from_file(path):
+        messagebox.showwarning(
+            "Load Warning",
+            "The selected file does not contain a '## Input Parameters' "
+            "section.")
+        return
+    toggle_simple_fields()
+    read_parameters()
+    run_calc()
+    build_report()
+    plot_pgs()
 
 
 def button_run_callback() -> None:
@@ -888,8 +1002,6 @@ def _build_field(parent, row, key, label_text, hint_text, hint_below) -> int:
             hint = ttk.Label(parent, text=hint_text, style="CardMuted.TLabel")
             hint.grid(row=row + 1, column=0, columnspan=2, padx=PADX,
                       pady=(0, PADY), sticky="w")
-            if key == "DIFF":
-                entries["DIFF_HINT"] = hint
             return row + 2
         ttk.Label(parent, text=hint_text, style="CardMuted.TLabel").grid(
             row=row, column=2, padx=PADX, pady=PADY, sticky="w")
@@ -1005,19 +1117,30 @@ def build_gui() -> None:
     save_button.pack(side="right", padx=(0, PAD))
     ttk.Button(bar, text="Run", style="Accent.TButton",
                command=button_run_callback).pack(side="right", padx=(0, PAD))
+    ttk.Button(bar, text="Load", style="Accent.TButton",
+               command=button_load_callback).pack(side="right", padx=(0, PAD))
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     global P1, gears
     P1 = PGS()
     gears = {name: GPG() for name in GEAR_ORDER}
     build_gui()
     init_parameters()
     toggle_simple_fields()
+    loaded = bool(argv) and load_parameters_from_file(argv[0])
+    if loaded:
+        toggle_simple_fields()
+    elif argv:
+        print("WARN: could not load parameters from " + argv[0]
+              + "; using the defaults")
     read_parameters()
     run_calc()
+    if loaded:
+        build_report()
+        plot_pgs()
     app.mainloop()
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:] if len(sys.argv) > 1 else None)

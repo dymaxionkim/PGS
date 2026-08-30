@@ -6,27 +6,9 @@ simple and Wolfrom planetary gear sets.
 Gear type codes
 ---------------
 0   Simple planetary gear set
-1   Wolfrom (teeth difference = 1)
-2   Wolfrom (teeth difference = 0.5)
-3   Wolfrom (teeth difference = 2)
-4   Wolfrom (teeth difference = 3)
-5   Wolfrom (teeth difference = 4)
-6   Wolfrom (teeth difference = 5)
-7   Wolfrom (teeth difference = 6)
-8   Wolfrom (teeth difference = 7)
-9   Wolfrom (teeth difference = 8)
-10  Wolfrom (teeth difference = 9)
-11  Wolfrom (teeth difference = 10)
-12  Wolfrom (teeth difference = 11)
-13  Wolfrom (teeth difference = 12)
-14  Wolfrom (teeth difference = 13)
-15  Wolfrom (teeth difference = 14)
-16  Wolfrom (teeth difference = 15)
-17  Wolfrom (teeth difference = 16)
-18  Wolfrom (teeth difference = 17)
-19  Wolfrom (teeth difference = 18)
-20  Wolfrom (teeth difference = 19)
-21  Wolfrom (teeth difference = 20)
+1   Wolfrom (3K) planetary gear set; both ring tooth counts (Zr1, Zr2)
+    are independent inputs supplied directly via the UI, and the stage-2
+    mesh mismatch is absorbed by the ring2 profile shift
 """
 
 from __future__ import annotations
@@ -46,17 +28,11 @@ class CheckResult:
     """Results of every geometric feasibility check (status strings)."""
 
     non_factorizing_1: str = ""
-    non_factorizing_2: str = ""
     equal_distance_1: str = ""
-    equal_distance_2: str = ""
     planets_interference_1: str = ""
-    planets_interference_2: str = ""
     involute_interference_1: str = ""
-    involute_interference_2: str = ""
     trimming_interference_1: str = ""
-    trimming_interference_2: str = ""
     teeth_number_integer_1: str = ""
-    teeth_number_integer_2: str = ""
 
 
 class PGS:
@@ -79,8 +55,6 @@ class PGS:
         self.shift_s1: float = 0.0
         self.shift_p1: float = 0.0
         self.ns1: float = 1000.0
-        # --- Derived constants ---
-        self.type_diff: float = 1.0
         # --- Stage-1 teeth & diameters ---
         self.zr1: float = 0.0
         self.zp1: float = 0.0
@@ -140,31 +114,14 @@ class PGS:
     # ------------------------------------------------------------------ calc
     def calc(self) -> None:
         """Compute derived teeth counts, diameters and ratios."""
+        # Both ring tooth counts (Zr1 and, for a Wolfrom, Zr2) are entered
+        # directly in the UI (stored negative for the internal rings) and
+        # kept as whole numbers.  The stage-1 equal-distance condition fixes
+        # the planet1 count:  |zr1| = zs1 + 2*zp1.
+        self.zr1 = -float(np.floor(abs(self.zr1) + 0.5))
         if self.is_wolfrom:
-            # type_diff is supplied directly via the UI ("diff" field).
-            #
-            # Ring tooth counts are decided in the zero-shift state: solve the
-            # layout with standard pitch circles (no shift factors) and round
-            # the ring teeth to integers, so both ring gears always have whole
-            # tooth numbers:
-            #   |zr1| = |zr2| + diff*Np
-            #   |zr2| = zp2 + dc0/m2       (ring2 internal mesh at carrier)
-            #   dc0   = m1*(zs1 + |zr1|)/2 (zero-shift carrier diameter)
-            # which reduces to
-            #   |zr1|*(m2 - m1/2) = m1*zs1/2 + m2*(zp2 + diff*Np)
-            denom = self.module2 - self.module1 / 2.0
-            numer = (self.module1 * self.zs1 / 2.0
-                     + self.module2 * (self.zp2 + self.type_diff * self.num_planets))
-            zr1_real = numer / denom
-            self.zr1 = -float(np.floor(zr1_real + 0.5))
-            self.zr2 = -float(np.floor(zr1_real - self.type_diff * self.num_planets + 0.5))
-            self.zp1 = (-self.zr1 - self.zs1) / 2
-        else:
-            # Simple: the Ring1 tooth count is entered directly in the UI
-            # (stored negative for the internal ring).  Stage-1 only:
-            #   |zr1| = zs1 + 2*zp1   ->   zp1 = (|zr1| - zs1)/2
-            self.zr1 = -float(np.floor(abs(self.zr1) + 0.5))
-            self.zp1 = (-self.zr1 - self.zs1) / 2
+            self.zr2 = -float(np.floor(abs(self.zr2) + 0.5))
+        self.zp1 = (-self.zr1 - self.zs1) / 2
 
         self.ds1 = self.zs1 * self.module1
         self.dp1 = self.zp1 * self.module1
@@ -206,9 +163,9 @@ class PGS:
             self.n_rf_carrier * (1.0 - (-self.zr1) / self.zp1))
 
     def _calc_stage2(self) -> None:
-        # Ring2 keeps its integer tooth count from calc(); the stage-2
-        # planets sit on the carrier radius and the ring's profile shift
-        # absorbs the remaining mismatch (see finalize_parameters).
+        # Stage-2 planets sit on the shared carrier radius; both ring
+        # counts are independent inputs and Ring2's profile shift absorbs
+        # the mesh mismatch (see finalize_parameters).
         self.dp2 = self.zp2 * self.module2
         self.ds2 = self.dc - self.dp2
         self.zs2 = self.ds2 / self.module2
@@ -369,25 +326,12 @@ class PGS:
         self.checks.non_factorizing_1 = self._label(cond, "Good for noise", "No good for noise")
         self._emit("Sequential Mesh Condition (Non-Factorizing, Not Required) 1",
                    self.checks.non_factorizing_1)
-        if self.is_wolfrom:
-            cond = (-self.zr2) % self.num_planets != 0
-            self.checks.non_factorizing_2 = self._label(cond, "Good for noise", "No good for noise")
-            self._emit("Sequential Mesh Condition (Non-Factorizing, Not Required) 2",
-                       self.checks.non_factorizing_2)
 
     def _check_equal_distance(self) -> None:
-        modulus = (self.num_planets * self.type_diff
-                   if self.is_wolfrom and self.type_diff != int(self.type_diff)
-                   else self.num_planets)
-        cond = (self.zs1 - self.zr1) % modulus == 0
+        cond = (self.zs1 - self.zr1) % self.num_planets == 0
         self.checks.equal_distance_1 = self._label(cond, "OK", "Fail")
         self._emit("Planet Numbers (Equal Distance Condition) 1",
                    self.checks.equal_distance_1)
-        if self.is_wolfrom:
-            cond = (-self.zr2) % self.num_planets == 0
-            self.checks.equal_distance_2 = self._label(cond, "OK", "Fail")
-            self._emit("Planet Numbers (Equal Distance Condition) 2",
-                       self.checks.equal_distance_2)
 
     def _check_planets_interference(self) -> None:
         cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
@@ -395,13 +339,6 @@ class PGS:
         self.checks.planets_interference_1 = self._label(cond, "OK", "Fail")
         self._emit("Planets Interference (Non-Overlap Condition) 1",
                    self.checks.planets_interference_1)
-        if self.is_wolfrom:
-            cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
-                    and self.num_planets < np.pi / np.arcsin(
-                        self.module2 * (self.zp2 + 2) / self.dc))
-            self.checks.planets_interference_2 = self._label(cond, "OK", "Fail")
-            self._emit("Planets Interference (Non-Overlap Condition) 2",
-                       self.checks.planets_interference_2)
         if self.pressure_angle != STANDARD_PRESSURE_ANGLE:
             print("No Check (Non-Standard) ")
 
@@ -415,11 +352,6 @@ class PGS:
                 and (-self.zr1) >= self._involute_thresh(self.zp1))
         self.checks.involute_interference_1 = self._label(cond, "OK", "Fail")
         self._emit("Involute Interference Condition 1", self.checks.involute_interference_1)
-        if self.is_wolfrom:
-            cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
-                    and (-self.zr2) >= self._involute_thresh(self.zp2))
-            self.checks.involute_interference_2 = self._label(cond, "OK", "Fail")
-            self._emit("Involute Interference Condition 2", self.checks.involute_interference_2)
         if self.pressure_angle != STANDARD_PRESSURE_ANGLE:
             print("No Check (Non-Standard) ")
 
@@ -428,11 +360,6 @@ class PGS:
                 and (-self.zr1 - self.zp1) >= MIN_RIM_FOR_TRIMMING)
         self.checks.trimming_interference_1 = self._label(cond, "OK", "Fail")
         self._emit("Trimming Interference 1", self.checks.trimming_interference_1)
-        if self.is_wolfrom:
-            cond = (self.pressure_angle == STANDARD_PRESSURE_ANGLE
-                    and (-self.zr2 - self.zp2) >= MIN_RIM_FOR_TRIMMING)
-            self.checks.trimming_interference_2 = self._label(cond, "OK", "Fail")
-            self._emit("Trimming Interference 2", self.checks.trimming_interference_2)
         if self.pressure_angle != STANDARD_PRESSURE_ANGLE:
             print("No Check (Non-Standard) ")
             self.checks.trimming_interference_1 = "No Check (Non-Standard)"
@@ -444,7 +371,3 @@ class PGS:
         cond = is_int(self.zs1) and is_int(self.zp1) and is_int(self.zr1)
         self.checks.teeth_number_integer_1 = self._label(cond, "OK", "Fail")
         self._emit("Teeth Numbers which is Integer 1", self.checks.teeth_number_integer_1)
-        if self.is_wolfrom:
-            cond = is_int(self.zp2) and is_int(self.zr2)
-            self.checks.teeth_number_integer_2 = self._label(cond, "OK", "Fail")
-            self._emit("Teeth Numbers which is Integer 2", self.checks.teeth_number_integer_2)
