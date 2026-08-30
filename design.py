@@ -63,7 +63,7 @@ DEFAULT_INPUTS = {
     "m2": 1.2,
     "Np": 3,
     "Zp2": 20.0,
-    "Zr1": 36.0,
+    "Zr1": 90.0,
     "Zs1": 12,
     "Ns1": 1000.0,
     "Gs1X": 0.4,
@@ -77,16 +77,16 @@ DEFAULT_INPUTS = {
     "E": 0.01,
     "PlotOption": 3,
     "TeethType": "Involute Teeth",
-    "DIFF": 12.0,
+    "Zr2": 54.0,
 }
 
 # (key, label, hint, hint-on-next-row?)
 PLANETARY_INPUTS = [
     ("TYPE", "Type", "", False),
-    ("DIFF", "Teeth difference, diff", "Wolfrom only", True),
     ("m1", "Module1, m1", "[mm] > 0", False),
     ("m2", "Module2, m2", "[mm] > 0", False),
     ("Np", "Planets number, Np", "[ea] > 2", False),
+    ("Zr2", "Ring2 Teeth, Zr2", "", False),
     ("Zp2", "Planet2 Teeth, Zp2", "", False),
     ("Zr1", "Ring1 Teeth, Zr1", "", False),
     ("Zs1", "Sun1 Teeth, Zs1", "[ea] > 0", False),
@@ -139,8 +139,8 @@ TOOTH_ALL_LABEL = "All"
 TOOTH_OPTIONS = [label for label, _ in TOOTH_ITEMS] + [TOOTH_ALL_LABEL]
 TOOTH_LABEL_TO_CLASS = dict(TOOTH_ITEMS)
 
-# Human-readable Type options: a free teeth-difference is entered manually
-# for the Wolfrom type, so only these two top-level choices remain.
+# Human-readable Type options: the Wolfrom type reads Zr2 (Ring2 Teeth)
+# directly instead of a teeth-difference, so only these two choices remain.
 TYPE_ITEMS = [
     ("Simple", 0),
     ("3K-Wolfrom", 1),
@@ -211,12 +211,13 @@ def read_parameters() -> None:
 
     is_wolfrom = entries["TYPE"].get() != "Simple"
     P1.gear_type = 1 if is_wolfrom else 0
-    P1.type_diff = float(entries["DIFF"].get()) if is_wolfrom else 1.0
     P1.module1 = float(entries["m1"].get())
     P1.module2 = float(entries["m2"].get())
     P1.num_planets = int(entries["Np"].get())
     if is_wolfrom:
         P1.zp2 = float(entries["Zp2"].get())
+        P1.zr2 = -abs(float(entries["Zr2"].get()))
+        P1.zr1 = -abs(float(entries["Zr1"].get()))
     else:
         P1.zr1 = -abs(float(entries["Zr1"].get()))
     P1.zs1 = float(entries["Zs1"].get())
@@ -475,31 +476,17 @@ def _append_checks(lines: list[str]) -> None:
     c = P1.checks
     lines.append("## Check Geometrical Conditions\n")
     lines.append("* Sequential Mesh Condition (Non-Factorizing, Not Required) 1 : " + c.non_factorizing_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Sequential Mesh Condition (Non-Factorizing, Not Required) 2 : " + c.non_factorizing_2 + "\n")
     lines.append("* Planet Numbers (Equal Distance Condition) 1 : " + c.equal_distance_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Planet Numbers (Equal Distance Condition) 2 : " + c.equal_distance_2 + "\n")
     lines.append("* Planets Interference (Non-Overlap Condition) 1 : " + c.planets_interference_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Planets Interference (Non-Overlap Condition) 2 : " + c.planets_interference_2 + "\n")
     lines.append("* Involute Interference Condition 1 : " + c.involute_interference_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Involute Interference Condition 2 : " + c.involute_interference_2 + "\n")
     lines.append("* Trimming Interference 1 : " + c.trimming_interference_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Trimming Interference 2 : " + c.trimming_interference_2 + "\n")
     lines.append("* Teeth Numbers which is Integer 1 : " + c.teeth_number_integer_1 + "\n")
-    if P1.is_wolfrom:
-        lines.append("* Teeth Numbers which is Integer 2 : " + c.teeth_number_integer_2 + "\n")
     lines.append("\n")
 
 
 def _append_inputs(lines: list[str]) -> None:
     lines.append("## Input Parameters\n")
     type_label = TYPE_CODE_TO_LABEL.get(int(P1.gear_type), "Unknown")
-    if P1.is_wolfrom:
-        type_label += " (diff=" + str(P1.type_diff) + ")"
     lines.append("* Type, TYPE = " + str(int(P1.gear_type)) + ", "
                  + type_label + "\n")
     lines.append("* Module1, m1 = " + str(float(P1.module1)) + "\n")
@@ -507,9 +494,9 @@ def _append_inputs(lines: list[str]) -> None:
         lines.append("* Module2, m2 = " + str(float(P1.module2)) + "\n")
     lines.append("* Planets Number, Np = " + str(int(P1.num_planets)) + "\n")
     if P1.is_wolfrom:
+        lines.append("* Ring2 Teeth, Zr2 = " + str(P1.zr2) + "\n")
         lines.append("* Planet2 Teeth, Zp2 = " + str(P1.zp2) + "\n")
-    else:
-        lines.append("* Ring1 Teeth, Zr1 = " + str(P1.zr1) + "\n")
+    lines.append("* Ring1 Teeth, Zr1 = " + str(P1.zr1) + "\n")
     lines.append("* Sun1 Teeth, Zs1 = " + str(int(P1.zs1)) + "\n")
     lines.append("* Input Speed, ns1 = " + str(float(P1.ns1)) + "\n")
     lines.append("* Shift Factor, Gs1.X = " + str(float(gears["Gs1"].shift_factor)) + "\n")
@@ -613,7 +600,8 @@ def _append_simple(lines: list[str]) -> None:
 
 
 def _append_gear_specs(lines: list[str]) -> None:
-    for name in GEAR_ORDER if P1.is_wolfrom else GEAR_ORDER[:3]:
+    for name in (GEAR_ORDER[:3] + GEAR_ORDER[4:]
+                 if P1.is_wolfrom else GEAR_ORDER[:3]):
         gear = gears[name]
         is_ring = name in RING_GEARS
         teeth_label = f"-{round(gear.teeth, 6)}" if is_ring else f"{round(gear.teeth, 6)}"
@@ -723,31 +711,28 @@ def _write_gear_csv(path: str, name: str) -> None:
 def toggle_simple_fields() -> None:
     """Disable Wolfrom-only fields when the Simple Type is selected.
 
-    For the Simple type the Planet2 (Wolfrom stage-2) input is replaced by
-    a Ring1 tooth-count input and only the stage-1 plot options stay usable.
+    For the Simple type the stage-2 inputs (m2, Gp2.X, Zr2, Zp2) are
+    hidden and only the stage-1 plot options stay usable.  The Ring1
+    tooth-count input (Zr1) stays available for both types.
     """
     is_simple = entries["TYPE"].get() == "Simple"
     if is_simple:
         entries["Zp2"].grid_remove()
         entries["Zp2_LABEL"].grid_remove()
+        entries["Zr2"].grid_remove()
+        entries["Zr2_LABEL"].grid_remove()
         entries["Zr1"].grid()
         entries["Zr1_LABEL"].grid()
     else:
         entries["Zp2"].grid()
         entries["Zp2_LABEL"].grid()
-        entries["Zr1"].grid_remove()
-        entries["Zr1_LABEL"].grid_remove()
+        entries["Zr2"].grid()
+        entries["Zr2_LABEL"].grid()
+        entries["Zr1"].grid()
+        entries["Zr1_LABEL"].grid()
     state = "disabled" if is_simple else "normal"
     entries["m2"].configure(state=state)
     entries["Gp2X"].configure(state=state)
-    if is_simple:
-        entries["DIFF"].grid_remove()
-        entries["DIFF_HINT"].grid_remove()
-        entries["DIFF_LABEL"].grid_remove()
-    else:
-        entries["DIFF"].grid()
-        entries["DIFF_HINT"].grid()
-        entries["DIFF_LABEL"].grid()
     plot_cb = entries["PlotOption"]
     if is_simple:
         plot_cb.configure(values=PLOT_OPTIONS_SIMPLE)
@@ -888,8 +873,6 @@ def _build_field(parent, row, key, label_text, hint_text, hint_below) -> int:
             hint = ttk.Label(parent, text=hint_text, style="CardMuted.TLabel")
             hint.grid(row=row + 1, column=0, columnspan=2, padx=PADX,
                       pady=(0, PADY), sticky="w")
-            if key == "DIFF":
-                entries["DIFF_HINT"] = hint
             return row + 2
         ttk.Label(parent, text=hint_text, style="CardMuted.TLabel").grid(
             row=row, column=2, padx=PADX, pady=PADY, sticky="w")
