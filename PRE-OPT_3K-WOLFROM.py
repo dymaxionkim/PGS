@@ -60,9 +60,9 @@ PARAM_ROWS = [
     ("m1", "Module1, m1", True, "[mm] > 0"),
     ("m2", "Module2, m2", True, "[mm] > 0"),
     ("Zs1", "Sun1 Teeth, Zs1", False, "[ea] > 0"),
-    ("Zr1", "Ring1 Teeth, Zr1", False, "[ea]"),
-    ("Zp2", "Planet2 Teeth, Zp2", False, "[ea]"),
-    ("Zr2", "Ring2 Teeth, Zr2", False, "[ea]"),
+    ("Zr1", "Ring1 Teeth, Zr1", False, "[ea] > 0"),
+    ("Zp2", "Planet2 Teeth, Zp2", False, "[ea] > 0"),
+    ("Zr2", "Ring2 Teeth, Zr2", False, "[ea] > 0"),
 ]
 
 SEARCH_DEFAULTS = {
