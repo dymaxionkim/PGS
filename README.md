@@ -6,6 +6,8 @@ Computes gear ratios, gear sizes, and geometric feasibility checks for
 simple and Wolfrom-type planetary gear sets. The tool is built with Python
 and provides a ttk-based graphical interface.
 
+* [MANUAL.md](MANUAL.md)
+
 ## Gear Types
 
 | Type | Code | Description |
@@ -57,10 +59,32 @@ Run the GUI:
 uv run design.py
 ```
 
+Passing a Markdown report path loads its `## Input Parameters` section at startup — the same refill the **Load** button performs — and runs the loaded design immediately:
+
+```bash
+uv run design.py Result/README.md
+```
+
 Or use the platform launcher:
 
 - `PGS.bat` on MS Windows
 - `./PGS.sh` on Linux
+
+### Pre-Optimization (PRE-OPT_3K-WOLFROM)
+
+Before designing a single combination with `design.py`, the pre-optimization tool scans a 3K-Wolfrom parameter space and lists every geometrically feasible tooth/module combination in a table:
+
+```bash
+uv run PRE-OPT_3K-WOLFROM.py   # or PRE-OPT_3K-WOLFROM.bat / .sh
+```
+
+![](img/PRE-OPT_3K-WOLFROM.png)
+
+- **Search Space** — the independent inputs (min/max/step) in the order `Np`, `m1`, `m2`, `Zs1`, `Zr1`, `Zp2`, `Zr2`. Integer parameters step by 1; only the modules have a Step column. Defaults: m1 0.8–0.9 (step 0.1), m2 1.2–1.3 (step 0.1), Np 3–4, Zr2 50–55, Zp2 35–40, Zr1 85–95, Zs1 15–20.
+- **Start** — runs the search and fills the table only: no folder picker and no file is written. It evaluates 10 checks (the stage-1 checks on `(Zs1, Zp1, Zr1, Np)` plus their stage-2 analogue on `(Zr2, Zp2, Np)`, skipping the virtual Gs2), using two pre-pass tables for speed.
+- **Save** (immediately right of Start) — asks for a folder and writes the current table to `Result.xlsx`. Warns when there is nothing to save yet, and refuses to save more rows than the Excel row limit (1 048 576).
+- **PGS** (right of Save) — enabled only when exactly one table row is selected; launches `design.py` with that row's parameters pre-filled (it writes a temporary report and starts `python design.py <report>`).
+- **Table columns** — `Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio`, where `Dr1 = m1·|Zr1|`, `Dr2 = m2·|Zr2|` and `Ratio` is the Type-3K total ratio `g22`. `Zp1 = (|Zr1| − Zs1)/2` follows from the equal-distance condition.
 
 ### Input Parameters
 
@@ -69,13 +93,13 @@ Or use the platform launcher:
 | Parameter | Description |
 |-----------|-------------|
 | Type | Gearbox type from the table above |
+| Planet number, Np | Number of planets [ea], > 2 |
 | Module1, m1 | Stage-1 gear module [mm], > 0 |
 | Module2, m2 | Stage-2 gear module [mm], > 0 |
-| Np | Number of planets [ea], > 2 |
-| Zr2 | Stage-2 ring gear teeth number [ea], > 0 (3K-Wolfrom only); entered right above Zp2. Together with Zr1, Zp2, Zs1, m1, m2 it determines the gear ratios and the stage-2 mesh (adjust the two rings to tune the reduction ratio). The stage-2 sun `Zs2 = (dc − dp2)/m2` is derived from the shared carrier radius and may be fractional |
-| Zp2 | Stage-2 planet gear teeth number [ea], > 0 (3K-Wolfrom only); stage-2 planets are placed on the stage-1 carrier radius |
-| Zr1 | Stage-1 ring gear teeth number [ea], > 0; independent input for both Simple and 3K-Wolfrom |
-| Zs1 | Sun gear stage 1 teeth number [ea], > 0; defines gear ratio |
+| Sun1 Teeth, Zs1 | Sun gear stage 1 teeth number [ea], > 0; defines gear ratio |
+| Ring1 Teeth, Zr1 | Stage-1 ring gear teeth number [ea], > 0; independent input for both Simple and 3K-Wolfrom |
+| Planet2 Teeth, Zp2 | Stage-2 planet gear teeth number [ea], > 0 (3K-Wolfrom only); stage-2 planets are placed on the stage-1 carrier radius |
+| Ring2 Teeth, Zr2 | Stage-2 ring gear teeth number [ea], > 0 (3K-Wolfrom only); entered right below Zp2. Together with Zr1, Zp2, Zs1, m1, m2 it determines the gear ratios and the stage-2 mesh (adjust the two rings to tune the reduction ratio). The stage-2 sun `Zs2 = (dc − dp2)/m2` is derived from the shared carrier radius and may be fractional |
 | Input speed, ns1 | Input speed of the stage-1 sun gear Gs1 [rpm]; used to compute the operating speeds shown in the Speed block |
 | Shift factor, Gs1.X | Profile shift coefficient of stage-1 sun gear |
 | Shift factor, Gp1.X | Profile shift coefficient of stage-1 planet gear; together with Gs1.X it determines the carrier radius |
@@ -92,7 +116,7 @@ Or use the platform launcher:
 ### Run vs Load vs Save
 
 - **Run** computes the gearbox, fills the result panel and shows the plot preview of the selected Plot option (no files are written).
-- **Load** asks for a `README.md` file (e.g. a previously saved `Result/README.md`), reads its `## Input Parameters` section, refills the input widgets (ring tooth counts are stored negative in the report and converted back to the positive numbers the fields expect), and runs the calculation like **Run**. It is the way to reopen and continue a saved design.
+- **Load** asks for a `README.md` file (e.g. a previously saved `Result/README.md`), reads its `## Input Parameters` section, refills the input widgets (ring tooth counts are stored negative in the report and converted back to the positive numbers the fields expect), and runs the calculation like **Run**. It is the way to reopen and continue a saved design. The same refill happens automatically at startup when a report path is passed on the command line (`uv run design.py Result/README.md`).
 - **Save** re-runs the calculation, asks which folder to use (directory picker), then creates a `Result` directory inside it and writes every output file — including the `Result/README.md` that **Load** reads back.
 
 ### Command line (headless)
@@ -100,12 +124,13 @@ Or use the platform launcher:
 `PGS_CLI.py` re-runs a saved design without the GUI — it reads the `## Input Parameters` section of a Markdown report, performs the exact same calculation as **Run**, and exports every result file next to the input file:
 
 ```
-uv run PGS_CLI.py <README.md> [SaveAll|SaveOK]
+uv run PGS_CLI.py <README.md> [SaveAll|SaveOK|SaveMD]
 ```
 
 - `<README.md>` — path to a Markdown file carrying the `## Input Parameters` section (e.g. `Result/README.md`).
 - `SaveAll` (default when omitted) — writes the report `README.md`, the `Involute_*`/`Cycloid_*`/`All_*.png` drawings, and the per-gear folders (`Gs1`/`Gp1`/`Gr1`[`/Gp2`/`Gr2`] with `Involute`/`Cycloid` inside), all **in the same folder as the input file**, with the same layout as GUI **Save**.
 - `SaveOK` — skips writing anything when the regenerated `## Check Geometrical Conditions` contains a `Fail` status.
+- `SaveMD` — like `SaveOK`, writes nothing while any check is `Fail`; when every check is `OK` it writes **only the report `README.md`** (no drawings, no per-gear folders).
 
 Note: since the report is written as `README.md` in the input file's folder, an input file that is itself named `README.md` will be overwritten by the regenerated report.
 
@@ -160,8 +185,10 @@ The result panel displays:
 | `GPG.py` | Generic involute gear profile generation (external/internal gears) |
 | `CPG.py` | Cycloidal gear profile generator, drop-in replacement sharing the `GPG` interface |
 | `FGPG2_CLI.py` | Bundled FGPG2 CLI entry (`FGPG2_CLI.py <Inputs.csv> [involute\|cycloid]`) that regenerates the per-gear Result files |
-| `PGS_CLI.py` | Headless CLI runner (`PGS_CLI.py <README.md> [SaveAll\|SaveOK]`) — runs the same calculation as **Run** from a report's `## Input Parameters` and exports all files next to it |
+| `PGS_CLI.py` | Headless CLI runner (`PGS_CLI.py <README.md> [SaveAll\|SaveOK\|SaveMD]`) — runs the same calculation as **Run** from a report's `## Input Parameters` and exports all files next to it |
 | `fgpg2/` | Ported FGPG2 generator package (`gear.py`, `cycloid.py`, `exporters.py`, `plotter.py`) used in-process to write `Result.csv` / `Result.dxf` / `Result1.png` / `Result2.png` |
 | `PGS.bat` / `PGS.sh` | Platform launcher scripts |
+| `PRE-OPT_3K-WOLFROM.py` | Pre-optimization search GUI — scans a 3K-Wolfrom parameter space, lists the feasible tooth/module combinations in a table, exports them to `Result.xlsx`, and opens the selected combination in `design.py` |
+| `PRE-OPT_3K-WOLFROM.bat` / `PRE-OPT_3K-WOLFROM.sh` | Pre-optimization launcher scripts |
 
 ## Thank you!

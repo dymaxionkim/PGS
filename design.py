@@ -85,13 +85,13 @@ DEFAULT_INPUTS = {
 # (key, label, hint, hint-on-next-row?)
 PLANETARY_INPUTS = [
     ("TYPE", "Type", "", False),
+    ("Np", "Planet number, Np", "[ea] > 2", False),
     ("m1", "Module1, m1", "[mm] > 0", False),
     ("m2", "Module2, m2", "[mm] > 0", False),
-    ("Np", "Planets number, Np", "[ea] > 2", False),
-    ("Zr2", "Ring2 Teeth, Zr2", "", False),
-    ("Zp2", "Planet2 Teeth, Zp2", "", False),
-    ("Zr1", "Ring1 Teeth, Zr1", "", False),
     ("Zs1", "Sun1 Teeth, Zs1", "[ea] > 0", False),
+    ("Zr1", "Ring1 Teeth, Zr1", "", False),
+    ("Zp2", "Planet2 Teeth, Zp2", "", False),
+    ("Zr2", "Ring2 Teeth, Zr2", "", False),
     ("Ns1", "Input speed, ns1", "[rpm]", False),
 ]
 
@@ -795,40 +795,19 @@ def _set_entry_text(key: str, value: str) -> None:
     w.insert(0, value)
 
 
-def button_load_callback() -> None:
-    """Load the inputs back from a saved Result README.md file.
+def _apply_report_values(values: dict[str, str]) -> bool:
+    """Refill the input widgets from a report ``## Input Parameters`` map.
 
-    Opens a file picker for a "README.md" result file, reads the
-    "## Input Parameters" section and refills the input widgets, then
-    runs the calculation exactly like the Run button.  Ring tooth counts
-    are stored negative in the report, so they are loaded back as the
+    Returns False when the map carries no applicable parameter.  Ring tooth
+    counts are stored negative in the report, so they are loaded back as the
     positive numbers expected by the input fields.
     """
-    path = filedialog.askopenfilename(
-        title="Select the README.md result file to load parameters from",
-        filetypes=[("README.md", "README.md"),
-                   ("Markdown files", "*.md"),
-                   ("All files", "*.*")])
-    if not path:
-        return
-    try:
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-    except OSError:
-        messagebox.showerror("Load Error",
-                             "Could not read the file:\n" + path)
-        return
-    values = _parse_input_parameters(text)
-    if not values:
-        messagebox.showwarning(
-            "Load Warning",
-            "The selected file does not contain a '## Input Parameters' "
-            "section.")
-        return
+    applied = False
     for key, value in values.items():
         entry_key = REPORT_KEY_TO_ENTRY.get(key)
         if entry_key is None or entry_key not in entries:
             continue
+        applied = True
         if entry_key == "TYPE":
             try:
                 code = int(value.split(",")[0].strip())
@@ -846,6 +825,45 @@ def button_load_callback() -> None:
             _set_entry_text(entry_key, str(number))
         else:
             _set_entry_text(entry_key, value)
+    return applied
+
+
+def load_parameters_from_file(path: str) -> bool:
+    """Load the inputs from a report file's ``## Input Parameters`` section.
+
+    Reads ``path`` and refills the input widgets; returns False when the
+    file cannot be read or carries no applicable parameter.  Used by the
+    Load button and by command-line startup (``python design.py <file>``).
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return False
+    values = _parse_input_parameters(text)
+    return _apply_report_values(values)
+
+
+def button_load_callback() -> None:
+    """Load the inputs back from a saved Result README.md file.
+
+    Opens a file picker for a "README.md" result file, reads the
+    "## Input Parameters" section and refills the input widgets, then
+    runs the calculation exactly like the Run button.
+    """
+    path = filedialog.askopenfilename(
+        title="Select the README.md result file to load parameters from",
+        filetypes=[("README.md", "README.md"),
+                   ("Markdown files", "*.md"),
+                   ("All files", "*.*")])
+    if not path:
+        return
+    if not load_parameters_from_file(path):
+        messagebox.showwarning(
+            "Load Warning",
+            "The selected file does not contain a '## Input Parameters' "
+            "section.")
+        return
     toggle_simple_fields()
     read_parameters()
     run_calc()
@@ -1103,17 +1121,26 @@ def build_gui() -> None:
                command=button_load_callback).pack(side="right", padx=(0, PAD))
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     global P1, gears
     P1 = PGS()
     gears = {name: GPG() for name in GEAR_ORDER}
     build_gui()
     init_parameters()
     toggle_simple_fields()
+    loaded = bool(argv) and load_parameters_from_file(argv[0])
+    if loaded:
+        toggle_simple_fields()
+    elif argv:
+        print("WARN: could not load parameters from " + argv[0]
+              + "; using the defaults")
     read_parameters()
     run_calc()
+    if loaded:
+        build_report()
+        plot_pgs()
     app.mainloop()
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:] if len(sys.argv) > 1 else None)

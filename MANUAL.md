@@ -14,6 +14,7 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 2. [3K Wolfrom Gearbox 구성 및 설계 순서](#2-3k-wolfrom-gearbox-구성-및-설계-순서)
 3. [핵심 알고리즘과 이론](#3-핵심-알고리즘과-이론)
 4. [플로우차트](#4-플로우차트)
+5. [조합 사전 탐색 도구 (PRE-OPT_3K-WOLFROM)](#5-조합-사전-탐색-도구-pre-opt_3k-wolfrom)
 
 ---
 
@@ -28,9 +29,11 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 | `GPG.py` | 인볼루트 치형 프로파일 생성기 (외/내접 기어 공용) |
 | `CPG.py` | 사이클로이드 치형 프로파일 생성기 (`GPG`와 동일 인터페이스의 교체용 모듈) |
 | `FGPG2_CLI.py` | 이식된 FGPG2 CLI 진입점 (`FGPG2_CLI.py <Inputs.csv> [involute\|cycloid]`) — 기어별 Result 파일을 재생성 |
-| `PGS_CLI.py` | 명령줄(헤드리스) 실행기 — `.md` 리포트의 `## Input Parameters`를 읽어 GUI와 동일한 계산을 수행하고, SaveAll/SaveOK 옵션에 따라 결과 파일을 저장 (§2.9) |
+| `PGS_CLI.py` | 명령줄(헤드리스) 실행기 — `.md` 리포트의 `## Input Parameters`를 읽어 GUI와 동일한 계산을 수행하고, SaveAll/SaveOK/SaveMD 옵션에 따라 결과 파일을 저장 (§2.9) |
 | `fgpg2/` | 프로젝트에 이식된 FGPG2 치형 생성 패키지 (`gear.py`, `cycloid.py`, `exporters.py`, `plotter.py`) — Save 시 `Result.csv`/`Result.dxf`/`Result1.png`/`Result2.png`를 인프로세스로 생성 |
 | `PGS.bat` / `PGS.sh` | OS별 실행 스크립트 |
+| `PRE-OPT_3K-WOLFROM.py` | 조합 사전 탐색 GUI — 3K-Wolfrom 파라미터 공간을 스캔하여 기하적으로 성립 가능한 조합을 표로 나열, `Result.xlsx` 저장 및 선택 조합을 `design.py`로 연동 (§5) |
+| `PRE-OPT_3K-WOLFROM.bat` / `PRE-OPT_3K-WOLFROM.sh` | PRE-OPT 전용 실행 스크립트 |
 
 ### 1.2 Wolfrom(3K) 유성기어장치의 구조
 
@@ -69,6 +72,8 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 ```bash
 uv sync            # 최초 1회: 의존성 설치
 uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
+uv run design.py Result/README.md   # 보고서 경로 인자 → 시작 시 파라미터 자동 입력 후 바로 계산
+uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-WOLFROM.bat / Linux: ./PRE-OPT_3K-WOLFROM.sh)
 ```
 
 ### 2.2 Step 1 — 감속비 요구치를 Type 및 링 치수(Zr1·Zr2) 선택으로 변환
@@ -77,7 +82,7 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 
 - **Type 콤보박스**에서 `Simple` 또는 `3K-Wolfrom` 중 선택한다.
 - 두 링기어 치수 `Ring1 Teeth, Zr1` 와 `Ring2 Teeth, Zr2` 는 **독립 입력 변수**로, 각각 1단·2단 링기어 치수를 직접 기입한다 (§3.2 참조).
-- `3K-Wolfrom`을 선택하면 `Planet2 Teeth, Zp2` 바로 위에 `Ring2 Teeth, Zr2` 입력란이 표시된다.
+- `3K-Wolfrom`을 선택하면 `Planet2 Teeth, Zp2` 바로 아래에 `Ring2 Teeth, Zr2` 입력란이 표시된다.
 - `Simple`을 선택하면 2단 관련 입력(`Module2, m2` · `Shift factor, Gp2.X` · `Ring2 Teeth, Zr2` · `Planet2 Teeth, Zp2`)이 숨겨진다. Plot 옵션도 1단 전용(`Stage1`/`Gs1`/`Gp1`/`Gr1`)만 제공한다.
 - 감속비를 높이려면 두 링기어의 치수 차가 작아지도록, 감속비를 낮추려면 치수 차가 커지도록 $Z_{r2}$ 를 조정한다 ($Z_{r1}$ 와 조합).
 - GUI 기본값은 `3K-Wolfrom` / `Zr1 = 90.0` · `Zr2 = 54.0` 이다 (이때 $m_1=0.8$, $m_2=1.2$, $N_p=3$, $Z_{p2}=20$, $Z_{s1}=12$ 이면 감속비 58.5).
@@ -88,14 +93,16 @@ uv run design.py   # GUI 실행 (또는 Windows: PGS.bat / Linux: ./PGS.sh)
 
 | 입력 항목 | 기호 | 의미 / 선정 지침 |
 |-----------|------|------------------|
+| Planet number, Np | $N_p$ | 유성기어 개수 [ea], > 2 (등간 배치·조립 조건을 만족해야 함) |
 | Module1, m1 | $m_1$ | 1단 모듈 [mm], > 0 |
 | Module2, m2 | $m_2$ | 2단 모듈 [mm]. 통상 $m_2 > m_1$ |
-| Planets number, Np | $N_p$ | 유성기어 개수 [ea], > 2 (등간 배치·조립 조건을 만족해야 함) |
-| Ring2 Teeth, Zr2 | $Z_{r2}$ | 2단 링기어 치수 [ea] — **3K-Wolfrom만 직접 입력** |
-| Planet2 Teeth, Zp2 | $Z_{p2}$ | 2단 유성기어 치수 [ea] — **3K-Wolfrom만 직접 입력** |
-| Ring1 Teeth, Zr1 | $Z_{r1}$ | 1단 링기어 치수 [ea] — **직접 입력** (Simple·Wolfrom 공통) |
 | Sun1 Teeth, Zs1 | $Z_{s1}$ | 1단 태양기어 치수 [ea] — **기어비를 직접 좌우하는 값** |
+| Ring1 Teeth, Zr1 | $Z_{r1}$ | 1단 링기어 치수 [ea] — **직접 입력** (Simple·Wolfrom 공통) |
+| Planet2 Teeth, Zp2 | $Z_{p2}$ | 2단 유성기어 치수 [ea] — **3K-Wolfrom만 직접 입력** |
+| Ring2 Teeth, Zr2 | $Z_{r2}$ | 2단 링기어 치수 [ea] — **3K-Wolfrom만 직접 입력** |
 | Input speed, ns1 | $n_{s1}$ | 태양기어 `Gs1`의 입력 회전수 [rpm] — **Speed 블록(§3.4-e·f)의 운전 속도 계산에 사용** |
+
+> UI 배치 순서는 **Type → Planet number Np → Module1 m1 → Module2 m2 → Sun1 Zs1 → Ring1 Zr1 → Planet2 Zp2 → Ring2 Zr2 → Input speed ns1** 이다.
 
 ### 2.4 Step 3 — 치형 상세 파라미터 입력 ("Involute Gear Spec" 카드)
 
@@ -178,13 +185,13 @@ Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
 ### 2.8 설계 순서 요약 (한 장 요약)
 
 ```
-감속비 요구치 결정 → Type 선택 → (m1, m2, Np, Zr1·Zs1, 그리고 Wolfrom은 Zr2·Zp2) 입력
+감속비 요구치 결정 → Type 선택 → (Np, m1, m2, Zs1·Zr1, 그리고 Wolfrom은 Zp2·Zr2) 입력
 → 전위·백래시·치형 파라미터 입력 → Run (계산·프리뷰만)
 → 자동: 치수 배치 해(Zp1, Zs2), 기어비, 링 전위계수, 치형 도면
 → 기하 검사 6종(1단) 통과 여부 확인 → 미달이면 입력 변경 후 재실행(반복)
 → 전부 OK면 Save → 선택 폴더에 Result/ 생성 (README.md · 도면 PNG · 기어별 CSV·FGPG2 산출물)
 → 이후 이어서 설계할 때는 Load로 이전 Result/README.md 선택 → 파라미터 자동 재입력
-→ 헤드리스 재계산·재저장은 CLI PGS_CLI.py <README.md> [SaveAll|SaveOK] 로 (§2.9)
+→ 헤드리스 재계산·재저장은 CLI PGS_CLI.py <README.md> [SaveAll|SaveOK|SaveMD] 로 (§2.9)
 ```
 
 ### 2.9 명령줄(CLI) 실행 — `PGS_CLI.py`
@@ -192,12 +199,13 @@ Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
 GUI를 띄우지 않고도 **GUI Save와 동일한 계산·저장**을 수행할 수 있다:
 
 ```bash
-uv run PGS_CLI.py <README.md> [SaveAll|SaveOK]
+uv run PGS_CLI.py <README.md> [SaveAll|SaveOK|SaveMD]
 ```
 
 - `<README.md>` — `## Input Parameters` 섹션을 가진 마크다운 파일 경로(예: `Result/README.md`). 이 섹션에서 Type·치수·전위·백래시 등을 읽어 GUI `Run`과 동일한 계산을 수행한다.
 - `SaveAll`(기본값) 또는 **argument 생략** — 계산 결과(`README.md` 보고서 · `Involute_*/Cycloid_*/All_*.png` 도면)와 개별 기어 폴더(`Gs1`/`Gp1`/`Gr1`[·`Gp2`/`Gr2`] + `Involute`·`Cycloid` 산출물)를 `<README.md>`와 **같은 폴더**에 저장한다. 저장 구조는 GUI Save와 동일하다.
 - `SaveOK` — 새로 계산된 `## Check Geometrical Conditions`에 **"Fail" 상태가 하나라도 있으면 계산 결과·생성 파일을 저장하지 않는다**.
+- `SaveMD` — `SaveOK`처럼 검사에 **"Fail"이 하나라도 있으면 아무것도 저장하지 않는다**. 검사가 **전부 "OK"인 경우에만 `README.md` 보고서 하나만** 저장하고, PNG 도면·기어별 폴더 등 나머지 파일은 저장하지 않는다.
 - 저장되는 `README.md` 이름이 입력 파일과 같으면(`input.md` 외, 파일명이 `README.md`인 경우) **입력 보고서를 재생성 결과로 덮어쓴다**는 점에 유의한다.
 
 ---
@@ -689,6 +697,55 @@ flowchart LR
 
     COL1 --> COL2
 ```
+
+---
+
+## 5. 조합 사전 탐색 도구 — PRE-OPT_3K-WOLFROM.py
+
+`design.py`로 개별 설계를 하기 전에, **3K-Wolfrom 파라미터 공간을 스캔하여 기하적으로 성립 가능한 조합을 1차로 걸러내는 사전 탐색(pre-optimization) 도구**이다. 검색 결과를 표로 나열하고, 원하는 조합 하나를 골라 `design.py`로 넘겨 상세 설계로 바로 이어갈 수 있다.
+
+```bash
+uv run PRE-OPT_3K-WOLFROM.py   # 또는 Windows: PRE-OPT_3K-WOLFROM.bat / Linux: ./PRE-OPT_3K-WOLFROM.sh
+```
+
+### 5.1 Search Space 입력
+
+독립 입력 7개($N_p$, $m_1$, $m_2$, $Z_{s1}$, $Z_{r1}$, $Z_{p2}$, $Z_{r2}$)를 **Min/Max/Step** 단위로 범위 지정한다. UI 배치 순서는 `Np → m1 → m2 → Zs1 → Zr1 → Zp2 → Zr2` 이다. 정수 치수 변수는 Step 없이 1씩 증가하고, 모듈($m_1$, $m_2$)만 Step 입력을 가진다.
+
+기본값:
+
+| 항목 | 범위 (Step) |
+|------|--------------|
+| Module1, m1 | 0.8 – 0.9 (0.1) |
+| Module2, m2 | 1.2 – 1.3 (0.1) |
+| Planet number, Np | 3 – 4 |
+| Ring2 Teeth, Zr2 | 50 – 55 |
+| Planet2 Teeth, Zp2 | 35 – 40 |
+| Ring1 Teeth, Zr1 | 85 – 95 |
+| Sun1 Teeth, Zs1 | 15 – 20 |
+
+### 5.2 버튼 동작
+
+하단 버튼은 왼쪽부터 **Start → Save → PGS → Exit** 순서로 배치된다.
+
+- **Start** — 검색을 수행하고 **테이블만 채운다.** 폴더 선택 없이 **어떤 파일도 저장하지 않는다.** 완료 시 조합 개수와 상태가 하단에 표시된다.
+- **Save** — Start **바로 오른쪽**. 현재 테이블(마지막 검색 결과)을 폴더 선택 후 `Result.xlsx`로 저장한다. 검색 전이면 경고하고, Excel 행 한도(1,048,576)를 초과하면 저장하지 않고 경고한다.
+- **PGS** — Save **바로 오른쪽**. 테이블에서 **정확히 1행**을 선택한 경우에만 활성화된다. 선택한 조합의 파라미터($TYPE=3K\text{-Wolfrom}$, $m_1$, $m_2$, $N_p$, $Z_{r2}$, $Z_{p2}$, $Z_{r1}$, $Z_{s1}$)를 임시 보고서로 내보내고 `design.py <보고서>`를 실행하여 **파라미터가 자동 입력된 상태로 상세 설계 창을 연다** (§2.6 Load 참조).
+- **Exit** — 프로그램 종료.
+
+### 5.3 결과 테이블
+
+컬럼 순서:
+
+```
+Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
+```
+
+- $Z_{p1} = (|Z_{r1}| - Z_{s1})/2$ — 1단 등거리 조건에서 자동 결정되는 유성 치수
+- $D_{r1} = m_1\,|Z_{r1}|$, $D_{r2} = m_2\,|Z_{r2}|$ — 두 링기어 피치원 직경
+- $Ratio$ — Type-3K 전체 감속비 $g_{22}$ (§3.4-c)
+
+탐색은 성능상 두 단계 전처리로 수행한다. 1단($N_p, Z_{r1}, Z_{s1}$) 조합 중 검사 1·3·5·7·9를 통과한 후보를 모으고, 2단($N_p, Z_{r2}, Z_{p2}$) 조합 중 검사 2·6·8·10을 통과한 표를 조인한 뒤, 모듈에 의존하는 Non-Overlap 2(검사 4)를 캐리어 직경 $d_c = m_1(Z_{s1}+Z_{p1})$ 로 판정한다. 결과 [Feasible Combinations] 표의 `Dr1`, `Dr2`, `Ratio`는 `PGS.py`의 기하 결과와 정확히 일치한다.
 
 ---
 

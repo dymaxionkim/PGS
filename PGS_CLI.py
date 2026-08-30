@@ -8,18 +8,20 @@ output files next to the input Markdown file, with the per-gear folders
 
 Usage::
 
-    uv run PGS_CLI.py <path/to/README.md> [SaveAll|SaveOK]
+    uv run PGS_CLI.py <path/to/README.md> [SaveAll|SaveOK|SaveMD]
 
 Arguments
 ---------
 <README.md>
     Path to the Markdown file carrying the ``## Input Parameters`` section.
 
-[SaveAll|SaveOK]   (default: SaveAll)
+[SaveAll|SaveOK|SaveMD]   (default: SaveAll)
     SaveAll : always write the report ``README.md``, the PNG drawings and the
               per-gear CSV/DXF/PNG result folders next to the input file.
     SaveOK  : only write them when ``## Check Geometrical Conditions`` of the
               newly computed report contains no "Fail" status.
+    SaveMD  : write nothing unless every check is "OK"; in that case save
+              only the report ``README.md`` (no images, no per-gear folders).
 
 Notes
 -----
@@ -136,9 +138,11 @@ def main(argv: list[str] | None = None) -> int:
         "mode",
         nargs="?",
         default="SaveAll",
-        choices=("SaveAll", "SaveOK"),
+        choices=("SaveAll", "SaveOK", "SaveMD"),
         help="'SaveAll' (default) always writes the result files; "
-             "'SaveOK' skips writing when a check fails.",
+             "'SaveOK' skips writing when a check fails; "
+             "'SaveMD' writes only the report README.md, and only when "
+             "every check is 'OK'.",
     )
     args = parser.parse_args(argv)
 
@@ -182,14 +186,23 @@ def main(argv: list[str] | None = None) -> int:
     print(report)
 
     out_dir = os.path.dirname(md_path)
-    if args.mode == "SaveOK" and _checks_contain_fail(report):
-        print(f"SaveOK: 'Fail' present in '## Check Geometrical Conditions'"
+    if args.mode in ("SaveOK", "SaveMD") and _checks_contain_fail(report):
+        print(f"{args.mode}: 'Fail' present in '## Check Geometrical Conditions'"
               f" -> nothing was saved to {out_dir}")
         return 0
 
     if os.path.basename(md_path).lower() == "readme.md":
         print(f"Note: overwriting the input report {os.path.basename(md_path)}"
               f" with the regenerated one.")
+
+    if args.mode == "SaveMD":
+        os.makedirs(out_dir, exist_ok=True)
+        with open(os.path.join(out_dir, "README.md"), "w",
+                  encoding="utf-8") as f:
+            f.write(report)
+        print(f"README.md saved in {out_dir}")
+        return 0
+
     design.save_output(out_dir)
     design.save_pngs(out_dir)
     print(f"Result files saved in {out_dir}")
