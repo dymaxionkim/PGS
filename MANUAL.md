@@ -586,35 +586,223 @@ P_i &= R(-i\,\Delta\theta)\, P_{\text{tooth}}, \quad i = 0,\, \ldots,\, Z-1
 
 **(6) 내접(링) 기어 관례** — `teeth < 0` 이면 치수·전위·백래시 부호를 반전하고 임의 높이↔깊이, 호브선단↔치선단 계수를 서로 교환하여 같은 수식으로 내치형을 생성한다. 위치는 $(x_0, y_0)$ 평행이동 + `rotate_angle` 회전으로 배치되며, 유성기어에는 $y_0 = d_c/2$ 가 부여된다.
 
-**(7) 사이클로이드 대안 — `CPG.py`** — 인볼루트 대신 **사이클로이드 치형**을 생성하는 `GPG`와 동일 인터페이스의 교체 모듈이다. 플랭크는 피치원 위(아래)를 굴러가는 굴림원으로 생성한다.
+**(7) 사이클로이드 대안 — `CPG.py`**
 
-**어덴츠 플랭크(외사이클로이드)** — 반경 $r_e = mA/2$ 의 굴림원이 피치원(반경 $r_p$) *바깥*을 굴러갈 때 생성점이 그리는 곡선. 롤각 $\varphi$ 에 대하여:
+인볼루트 대신 **사이클로이드 치형**을 생성하는 `GPG`와 동일 인터페이스의 교체 모듈이다. 사이클로이드 기어의 플랭크는 피치원에 접하는 **굴림원(rolling circle)**이 피치원 위를 굴러갈 때, 그 원 위의 한 점이 그리는 곡선——외사이클로이드(epicycloid)와 내사이클로이드(hypocycloid)——으로 구성된다. 인볼루트와 달리 압력각이 일정하지 않으며, 롤각에 따라 순간 압력각이连续적으로 변하는 것이 본질적인 차이이다.
+
+#### (7-a) 기준 원과 설계 파라미터
 
 ```math
 \begin{aligned}
-A &= \frac{r_e\,\varphi}{r_p},\\
-X &= (r_p+r_e)\cos A - r_e\cos(A+\varphi),\\
-Y &= (r_p+r_e)\sin A - r_e\sin(A+\varphi)
+r_p &= m\!\left(\frac{Z}{2}+X\right), &&(\text{피치원 반경})\\[4pt]
+r &= \frac{g_m\,m}{2}, &&(\text{굴림원 반경; } g_m = \texttt{gen\_ratio})\\[4pt]
+r_{tip} &= r_p + A\,m, &&(\text{어덴덤(이끝) 원 반경})\\[4pt]
+r_{root} &= r_p - D\,m, &&(\text{디덴덤(이뿌리) 원 반경})\\[4pt]
+\rho_E &= E\,m, &&(\text{치끝 라운드 반경})\\[4pt]
+\rho_C &= C\,m, &&(\text{루트 라운드 반경})
 \end{aligned}
 ```
 
-**덴든츠 플랭크(내사이클로이드)** — 반경 $r_c = mD/2$ 의 굴림원이 피치원 *안쪽*을 굴러갈 때의 곡선(부호 ± 반전 형태).
+단, 내접(링) 기어(`teeth < 0`)의 경우 `finalize_parameters`가 주입한 **작도용 운용 피치원 반경** $r_p = d_c/2 + m(Z_p/2 + x_p)$ 을 우선 사용한다. 굴림원 반경 $r$ 은 외측·내측 플랭크 모두 동일한 값을 사용한다.
 
-**피치원 반경** — $r_p = m\big(Z/2+X\big)$. 단, 내접(링) 기어는 `finalize_parameters`가 주입한 **작도용 운용 피치원 반경** $r_p = d_c/2 + m\big(Z_p/2 + x_p\big)$ 을 우선 사용한다.
-
-**전위($X$)** — 치 전체의 방사 이동($X\,m$)으로 반영되며, 굴림원 반경·피치원은 그대로다.
-
-**백래시 $B$ 와 치두께** — 플랭크를 회전시키는 대신 다음 수식으로 **치 반각**을 정한다:
+기하 성립 조건:
 
 ```math
-t_{\mathrm{half}} = \frac{\pi/2 - B}{Z + 2X}
+\begin{gathered}
+r_{root} > 0 \quad\Longrightarrow\quad Z + 2X > 2D,\\[3pt]
+r_p > r \quad\Longrightarrow\quad g_m < Z + 2X,\\[3pt]
+r_{tip} \le r_p + 2r, \qquad r_{root} \ge r_p - 2r
+\end{gathered}
 ```
 
-이때 피치원에서의 **원호 치두께**는 전위와 무관하게 항상 $\pi m/2 - mB$ 가 되어, 전위를 올려도 맞물림 상대 치형이 두꺼워져 간섭(끼임)되는 문제가 없다.
+조건을 만족하지 못하면 `ValueError`가 발생한다(예: 창성원이 너무 큽니다).
 
-**치 끝단/루트 라운드** — 치끝·루트를 각각 둥글림 반경 $mE$, $mC$ 의 원호로 연결하되, 곡선이 이웃 세그먼트를 벗어나지 않도록 `_fit_round()`가 반경을 자동 축소(클램프)한다.
+#### (7-b) 외사이클로이드(Epicycloid) — 어덴덤 플랭크(Addendum Flank)
 
-**윤곽 폐합** — 전체 치를 피치각 $2\pi/Z$ 간격으로 회전 배치한 뒤 첫 점을 끝에 이어붙여 점군이 **단일 폐곡선**이 되므로, matplotlib 도면에서 시작점–끝점 사이(심 seam)가 끊겨 보이지 않는다. 이웃 치 사이의 작은 간극(잇홈 바닥)은 짧은 연결선으로 자연히 이어진다.
+반경 $r$ 의 굴림원이 피치원 $r_p$ 의 **바깥쪽**을 굴러갈 때, 굴림원 위의 생성점 $P$ 가 그리는 곡선이다. 롤각 $\varphi$ ($\varphi=0$ 에서 생성점은 피치점 $(r_p,\,0)$ 에 위치)에 대하여 **캐리어 각도** $A$ 가 먼저 결정된다:
+
+```math
+A = \frac{r\,\varphi}{r_p}
+```
+
+이것은 굴림원의 중심이 피치원 중심을 따라 도는 각도이다. 생성점의 직교 좌표는:
+
+```math
+\boxed{
+\begin{aligned}
+X_{epi}(\varphi) &= (r_p + r)\cos A - r\cos(A + \varphi)\\[4pt]
+Y_{epi}(\varphi) &= (r_p + r)\sin A - r\sin(A + \varphi)
+\end{aligned}
+}
+```
+
+**기하적 의미**: 첫 번째 항 $(r_p+r)(\cos A,\,\sin A)$ 는 굴림원 중심의 궤적이고, 두 번째 항 $-r(\cos(A+\varphi),\,\sin(A+\varphi))$ 는 굴림원 중심에서 생성점까지의 상대 위치벡터이다. $\varphi$ 가 증가하면 곡선은 반시계 방향으로 피치원 바깥쪽으로 확장된다.
+
+피치점에서의 접선은 수직($y$축 방향)이며, $\varphi$ 가 작을 때 곡선은 거의 수직으로 뻗다가 $\varphi$ 가 커질수록 외측으로 휘어진다. 이는 인볼루트의 기원 원에서의 전개와 근본적으로 다른 거동이다.
+
+**원곡선 반지름** — 롤각 $\varphi$ 에서 원점에서의 거리:
+
+```math
+\rho_{epi}(\varphi) = \sqrt{(r_p+r)^2 + r^2 - 2r(r_p+r)\cos\varphi}
+```
+
+#### (7-c) 내사이클로이드(Hypocycloid) — 디덴덤 플랭크(Dedendum Flank)
+
+반경 $r$ 의 굴림원이 피치원 $r_p$ 의 **안쪽**을 굴러갈 때의 곡선이다. 캐리어 각도는 동일하게 $A = r\varphi/r_p$ 이나, 생성점의 좌표는 부호가 반전된다:
+
+```math
+\boxed{
+\begin{aligned}
+X_{hypo}(\varphi) &= (r_p - r)\cos A + r\cos(\varphi - A)\\[4pt]
+Y_{hypo}(\varphi) &= -(r_p - r)\sin A + r\sin(\varphi - A)
+\end{aligned}
+}
+```
+
+$\varphi$ 가 증가하면 곡선은 시계 방향으로 피치원 안쪽으로 수축된다. 피치점($\varphi=0$)에서 외사이클로이드와 **공통 접점**을 가지며, 이 접점에서 두 곡선은 피치원에 접한다——이것이 사이클로이드 기어의 **콩주(conjugate)** 동작이 성립하는 근본 이유이다.
+
+**원곡선 반지름**:
+
+```math
+\rho_{hypo}(\varphi) = \sqrt{r_p^2 - 4r(r_p-r)\sin^2\!\frac{\varphi}{2}}
+```
+
+#### (7-d) 롤각 한계 — 플랭크의 끝점 결정
+
+각 플랭크는 어덴덤 원($r_{tip}$) 또는 디덴덤 원($r_{root}$)에 닿을 때까지 생성된다. 이 교차점에서의 롤각은 피타고라스/코사인 법칙의 닫힌 해(closed-form)로 구한다.
+
+**어덴덤 플랭크(Addendum Flank) → 이끝원 교차** ($\varphi_{tip}$):
+
+외사이클로이드의 원곡선 반지름이 $r_{tip}$ 과 같아지는 조건으로부터:
+
+```math
+\boxed{
+\cos\varphi_{tip} = \frac{(r_p+r)^2 + r^2 - r_{tip}^2}{2r(r_p+r)}
+}
+```
+
+이것은 빗변 $r_p+r$, $r$, $r_{tip}$ 으로 구성된 삼각형에서 코사인 법칙을 적용한 결과이다.
+
+**디덴덤 플랭크(Dedendum Flank) → 이뿌리원 교차** ($\varphi_{root}$):
+
+내사이클로이드의 원곡선 반지름이 $r_{root}$ 과 같아지는 조건으로부터:
+
+```math
+\boxed{
+\sin^2\!\frac{\varphi_{root}}{2} = \frac{r_p^2 - r_{root}^2}{4r(r_p-r)}
+}
+\quad\Longrightarrow\quad
+\varphi_{root} = 2\arcsin\sqrt{\frac{r_p^2-r_{root}^2}{4r(r_p-r)}}
+```
+
+#### (7-e) 치두께와 백래시 — 전위 독립적 치 반각
+
+사이클로이드 기어에서 백래시 $B$ 는 플랭크를 **회전**시키는 대신 치 두께를 직접 조절한다. 전위 $X$ 가 있을 때의 **유효 치수(effective tooth count)**:
+
+```math
+Z_{eff} = Z + 2X
+```
+
+피치원에서의 **치 반각(half tooth-pitch angle)**:
+
+```math
+\boxed{
+t_{half} = \frac{\pi/2 - B}{Z_{eff}} = \frac{\pi/2 - B}{Z + 2X}
+}
+```
+
+이때 피치원에서의 **원호 치두께(circular tooth thickness)**:
+
+```math
+s_p = 2\,t_{half}\,r_p = \frac{(\pi/2 - B)\,m\,(Z+2X)}{Z+2X} = \frac{\pi m}{2} - Bm
+```
+
+**핵심 성질**: 원호 치두께 $s_p$ 는 전위 $X$ 와 **무관**하게 항상 $\pi m/2 - Bm$ 이다. 인볼루트와 달리 전위를 올려도 치가 두꺼워지지 않으므로, 맞물림 상대 기어와의 간섭(끼임) 문제가 발생하지 않는다. 이것이 사이클로이드 기어가 전위를 자유롭게 사용할 수 있는 이론적 근거이다.
+
+백래시가 0($B=0$)이면 피치원에서의 치두께와 잇홈(.spaceBetween)이 정확히 같아진다($\pi m/2$).
+
+#### (7-f) 치끝·루트 라운드 — 접선 필렛
+
+치끝과 루트에는 각각 반경 $\rho_E = Em$, $\rho_C = Cm$ 의 원호 라운드가 연결된다. 라운드의 중심은 해당 원(어덴덤/디덴덤)에서 라운드 반경만큼 안쪽으로 들어간 원 위에 놓인다:
+
+```math
+\begin{aligned}
+\text{치끝 라운드 중심 반지름: } & r_{tip} - \rho_E,\\[2pt]
+\text{루트 라운드 중심 반지름: } & r_{root} + \rho_C
+\end{aligned}
+```
+
+라운드는 플랭크 곡선과 해당 원에 **공통 접선(tangent)** 으로 연결된다. 구체적으로, 플랭크 위의 점 $P_i$ 에서의 접선 단위벡터 $\hat{d}_i$ 로부터 법선 $\hat{n}_i = (-d_{i,y},\,d_{i,x})$ 를 구하고, 라운드 중심 $C_i = P_i + \rho\,\hat{n}_i$ 를 놓은 뒤, $C_i$ 가 중심 반지름 원 위에 놓이는 위치에서 접점을 찾는다:
+
+```math
+\begin{aligned}
+C &= P_i + \rho\,\hat{n}_i,\\[2pt]
+\|C\| &= r_{tip} - \rho_E \quad(\text{치끝}), \qquad
+\|C\| = r_{root} + \rho_C \quad(\text{루트})
+\end{aligned}
+```
+
+라운드 반경이 치 형상에 너무 커서 접점이 치 중심선을 넘으면, `_fit_round()` 가 반경을 85%씩 자동 축소하여 유효한 라운드를 생성한다.
+
+#### (7-g) 반쪽 치형 조립과 전체 치 배열
+
+1. **반쪽 치형(half tooth)** — 루트 호 → 루트 라운드 → 내사이클로이드 → 외사이클로이드 → 치끝 라운드 → 치끝 호의 순서로 세그먼트를 연결한다. 이는 잇홈 중심($\theta = -t_{half}$)에서 치 중심($\theta = +t_{half}$)까지의 점군이다.
+
+2. **미러링** — 반쪽 치형을 치 중심선(각도 $t_{half}$)을 기준으로 $y$축 미러링하여 완전한 치형을 만든다. 미러 변환:
+
+```math
+\begin{pmatrix} X' \\ Y' \end{pmatrix}
+= \begin{pmatrix} \cos 2t_{half} & \sin 2t_{half} \\[2pt]
+                  \sin 2t_{half} & -\cos 2t_{half} \end{pmatrix}
+\begin{pmatrix} X \\ Y \end{pmatrix}
+```
+
+3. **정렬(alignment)** — 완성된 치형을 $x$축에 정렬하기 위해 $\texttt{align\_angle} = \pi/2 - t_{half}$ 만큼 회전한다:
+
+```math
+\begin{pmatrix} X'' \\ Y'' \end{pmatrix}
+= R(\texttt{align\_angle})\,
+\begin{pmatrix} X' \\ Y' \end{pmatrix}
+```
+
+4. **전체 치 배치** — 피치각 $\Delta\theta = 2\pi/Z$ 간격으로 $Z$개의 치를 회전 복사한다. 각 치 $i$ 의 회전 각도는 $-i\,\Delta\theta$ 이다:
+
+```math
+P_i = R(-i\,\Delta\theta)\,P_{\text{tooth}}, \qquad i = 0,\,1,\,\ldots,\,Z-1
+```
+
+인접 치는 순서를 뒤집어(reversed) 연결함으로써, 잇홈 바닥에서 자연스럽게 이어지는 **단일 폐곡선(closed loop)** 점군이 형성된다. matplotlib 도면에서 시작점–끝점 사이의 심(seam)이 끊겨 보이지 않는 이유이다.
+
+#### (7-h) 내접(링) 기어 관례와 좌표 이동
+
+`teeth < 0` 인 내치 기어는 `_apply_internal_convention()`에서 다음 변환을 거친다:
+
+```math
+Z \leftarrow |Z|,\quad X \leftarrow -X,\quad B \leftarrow -B,\quad
+A \leftrightarrow D,\quad C \leftrightarrow E
+```
+
+이로써 외치와 동일한 수식으로 내치형을 생성할 수 있다. 최종적으로 기어 중심을 $(x_0,\,y_0)$ 만큼 평행이동하고 `rotate_angle` 만큼 회전하여 배치한다:
+
+```math
+\begin{pmatrix} X_{final} \\ Y_{final} \end{pmatrix}
+= R(\texttt{rotate\_angle})\,
+\begin{pmatrix} X_{all} \\ Y_{all} \end{pmatrix}
++ \begin{pmatrix} x_0 \\ y_0 \end{pmatrix}
+```
+
+유성기어에는 $y_0 = d_c/2$ 가 부여되어 캐리어 위에 배치된다.
+
+#### (7-i) 사이클로이드 vs 인볼루트 — 핵심 차이 요약
+
+| 항목 | 인볼루트 (GPG) | 사이클로이드 (CPG) |
+|------|----------------|-------------------|
+| 플랭크 곡선 | 기원 원의 전개선 | 굴림원의 궤적 (epi/hypo) |
+| 압력각 | 상수 $\alpha_0$ (항상 일정) | 롤각에 따라 연속 변화 |
+| 콩주(conjugacy) | 기원 원의 둘레에서 일정한 속도비 | 피치점에서만 정확히 접촉 |
+| 백래시 적용 | 플랭크 회전 | 치두께 직접 조절 ($t_{half}$) |
+| 전위 효과 | 치두께 변화 → 간섭 위험 | 치두께 불변 ($\pi m/2 - Bm$) |
+| 루트 필렛 | 트로코이드 (호브 궤적) | 접선 원호 필렛 |
 
 `design.py`에서는 사이클로이드 기어를 고유 색상(1단 `#95c4ed`, 2단 `#19609d`)으로 그린다.
 

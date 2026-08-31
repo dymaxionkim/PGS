@@ -564,7 +564,7 @@ def _append_wolfrom(lines: list[str]) -> None:
     lines.append("* Sun1 = " + str(P1.ds1) + " [mm],  " + str(P1.zs1) + " [ea]\n")
     lines.append("* Planet1 = " + str(P1.dp1) + " [mm],  " + str(P1.zp1) + " [ea]\n")
     lines.append("* Ring1 = " + str(P1.dr1) + " [mm],  " + str(P1.zr1) + " [ea]\n")
-    lines.append("* Sun2 = " + str(P1.ds2) + " [mm],  " + str(P1.zs2) + " [ea]\n")
+    lines.append("* Sun2 (Not considered) = " + str(P1.ds2) + " [mm],  " + str(P1.zs2) + " [ea]\n")
     lines.append("* Planet2 = " + str(P1.dp2) + " [mm],  " + str(P1.zp2) + " [ea]\n")
     lines.append("* Ring2 = " + str(P1.dr2) + " [mm],  " + str(P1.zr2) + " [ea]\n")
     lines.append("* Radius of Carrier = " + str(P1.dc / 2) + " [mm]\n")
