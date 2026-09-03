@@ -683,10 +683,11 @@ def _generate_fgpg2_results(folder: str, profile: str = "involute") -> None:
 
 
 def save_output(out_dir: str) -> None:
-    """Write the Markdown report and per-gear result files into ``out_dir``."""
+    """Write the Markdown report, input-model CSV and per-gear results."""
     os.makedirs(out_dir, exist_ok=True)
     with open(out_dir + "/README.md", "w") as f:
         f.write(textbox.get("0.0", "end"))
+    _write_input_model_csv(out_dir + "/input_model.csv")
     # Gear folders: the Stage-1 gears always, Stage-2 Gp2/Gr2 for the Wolfrom
     # type only.  Gs2 is never exported.
     names = GEAR_ORDER[:3] + GEAR_ORDER[4:] if P1.is_wolfrom else GEAR_ORDER[:3]
@@ -707,6 +708,113 @@ def _write_gear_csv(path: str, name: str) -> None:
     with open(path, "w") as f:
         for key, value in _gear_csv_rows(name, gears[name]):
             f.write(f"{key},{value}\n")
+
+
+# ----------------------------------------------------- input model CSV (Save)
+# The full header of the exported "input_model.csv".  It mirrors the
+# reference "Input_data.csv": six gear rows (Sun/Planet/Annulus per stage)
+# followed by a single ETC/Carrier row carrying the carrier, shaft and frame
+# dimensions.
+INPUT_MODEL_HEADER = (
+    "Group,Component,Helix Angle (deg),Normal Module (mm),"
+    "Normal Pressure Angle (deg),Center Distance (mm),Number of Planets,"
+    "Number of Teeth,Face Width (mm),Normal Profile Shift Coefficient,"
+    "Quality Grade (ISO),Material,Gear Tooth Thickness Tolerance,"
+    "Basic Rack Addendum Factor,Basic Rack Dedendum Factor,Edge Radius Factor,"
+    "Carrier Pin Diameter (mm),Thickness of Carrier Input Side (mm),"
+    "Thickness of Carrier Output Side (mm),Diameter of Input Shaft (mm),"
+    "Frame Outer Diameter (mm)"
+)
+
+
+def _offset_circle_dia(gear: GPG) -> float:
+    """Return the gear's offset-circle diameter in mm."""
+    return 2 * gear.module * (gear.teeth / 2 + gear.shift_factor)
+
+
+def _input_model_gear_row(group: str, component: str, gear: GPG,
+                          center_dist: float, planets: int) -> list[object]:
+    """Compose one gear data row for the input-model CSV.
+
+    The gear objects have already run ``calc()``, so ring gears (Annulus)
+    carry a negative shift internally; the shift is negated back here to
+    match the design value, and the addendum/dedendum factors are swapped
+    back to their original magnitudes.
+    """
+    is_ring = component == "Annulus"
+    return [
+        group, component,
+        0,                              # Helix Angle (deg) — kept as-is
+        gear.module,                    # Normal Module (mm)
+        gear.pressure_angle,            # Normal Pressure Angle (deg)
+        center_dist,                    # Center Distance = Radius of Carrier
+        planets,                        # Number of Planets
+        gear.teeth,                     # Number of Teeth
+        gear.module * 5,                # Face Width (mm) ≈ 5x module
+        -gear.shift_factor if is_ring else gear.shift_factor,  # Normal shift
+        7,                              # Quality Grade (ISO) — kept as-is
+        "Default",                      # Material — kept as-is
+        "g26",                          # Tooth Thickness Tolerance — kept as-is
+        gear.dedendum_factor if is_ring else gear.addendum_factor,   # Addendum
+        gear.addendum_factor if is_ring else gear.dedendum_factor,   # Dedendum
+        # Edge Radius Factor = Hob end radius C.  calc() swaps the hob and
+        # tooth-tip radius factors on internal (ring) gears, so the original
+        # C lives in tooth_tip_radius_factor for a ring.
+        gear.tooth_tip_radius_factor if is_ring else gear.hob_tip_radius_factor,
+        "", "", "", "", "",             # carrier/shaft/frame only on ETC row
+    ]
+
+
+def _input_model_csv_rows() -> list[list[object]]:
+    """Build the rows of the input-model CSV for the current design."""
+    center_dist = P1.dc / 2.0
+    planets = P1.num_planets
+
+    rows = [
+        _input_model_gear_row("Planetary Gear Set 1", "Sun",
+                              gears["Gs1"], center_dist, planets),
+        _input_model_gear_row("Planetary Gear Set 1", "Planet",
+                              gears["Gp1"], center_dist, planets),
+        _input_model_gear_row("Planetary Gear Set 1", "Annulus",
+                              gears["Gr1"], center_dist, planets),
+    ]
+    stage2 = P1.is_wolfrom
+    if stage2:
+        rows.append(_input_model_gear_row("Planetary Gear Set 2", "Planet",
+                                          gears["Gp2"], center_dist, planets))
+        rows.append(_input_model_gear_row("Planetary Gear Set 2", "Annulus",
+                                          gears["Gr2"], center_dist, planets))
+
+    # Carrier pin: the smaller of the two planet offset-circle dia minus twice
+    # the matching planet's module.
+    planets_gears = [gears["Gp1"]] + ([gears["Gp2"]] if stage2 else [])
+    pin_gear = min(planets_gears, key=_offset_circle_dia)
+    carrier_pin = _offset_circle_dia(pin_gear) - 2 * pin_gear.module
+
+    # Carrier thicknesses: half the face width of each stage's planet gear.
+    thick_in = gears["Gp1"].module * 5 / 2
+    thick_out = (gears["Gp2"].module if stage2 else gears["Gp1"].module) * 5 / 2
+
+    shaft_dia = _offset_circle_dia(gears["Gs1"]) - 2 * gears["Gs1"].module
+
+    # Frame outer diameter: the larger of the two ring offset-circle dia plus
+    # four times the matching ring's module.
+    rings_gears = [gears["Gr1"]] + ([gears["Gr2"]] if stage2 else [])
+    frame_gear = max(rings_gears, key=_offset_circle_dia)
+    frame_outer = _offset_circle_dia(frame_gear) + 4 * frame_gear.module
+
+    rows.append(["ETC", "Carrier",
+                 "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+                 carrier_pin, thick_in, thick_out, shaft_dia, frame_outer])
+    return rows
+
+
+def _write_input_model_csv(path: str) -> None:
+    """Write the input-model CSV mirroring ``Input_data.csv``."""
+    with open(path, "w", newline="") as f:
+        f.write(INPUT_MODEL_HEADER + "\n")
+        for row in _input_model_csv_rows():
+            f.write(",".join("" if v == "" else str(v) for v in row) + "\n")
 
 
 # ---------------------------------------------------------------- callbacks
