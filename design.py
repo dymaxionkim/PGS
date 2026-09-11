@@ -11,6 +11,7 @@ Run with::
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import sys
@@ -683,11 +684,11 @@ def _generate_fgpg2_results(folder: str, profile: str = "involute") -> None:
 
 
 def save_output(out_dir: str) -> None:
-    """Write the Markdown report, input-model CSV and per-gear results."""
+    """Write the Markdown report, model CSV and per-gear results."""
     os.makedirs(out_dir, exist_ok=True)
     with open(out_dir + "/README.md", "w") as f:
         f.write(textbox.get("0.0", "end"))
-    _write_input_model_csv(out_dir + "/input_model.csv")
+    _write_input_model_csv(out_dir + "/model.csv")
     # Gear folders: the Stage-1 gears always, Stage-2 Gp2/Gr2 for the Wolfrom
     # type only.  Gs2 is never exported.
     names = GEAR_ORDER[:3] + GEAR_ORDER[4:] if P1.is_wolfrom else GEAR_ORDER[:3]
@@ -711,7 +712,7 @@ def _write_gear_csv(path: str, name: str) -> None:
 
 
 # ----------------------------------------------------- input model CSV (Save)
-# The full header of the exported "input_model.csv".  It mirrors the
+# The full header of the exported "model.csv".  It mirrors the
 # reference "Input_data.csv": six gear rows (Sun/Planet/Annulus per stage)
 # followed by a single ETC/Carrier row carrying the carrier, shaft and frame
 # dimensions.
@@ -730,6 +731,11 @@ INPUT_MODEL_HEADER = (
 def _offset_circle_dia(gear: GPG) -> float:
     """Return the gear's offset-circle diameter in mm."""
     return 2 * gear.module * (gear.teeth / 2 + gear.shift_factor)
+
+
+def _pitch_circle_dia(gear: GPG) -> float:
+    """Return the gear's pitch-circle diameter in mm (always positive)."""
+    return abs(gear.teeth) * gear.module
 
 
 def _input_model_gear_row(group: str, component: str, gear: GPG,
@@ -752,7 +758,7 @@ def _input_model_gear_row(group: str, component: str, gear: GPG,
         gear.teeth,                     # Number of Teeth
         gear.module * 5,                # Face Width (mm) ≈ 5x module
         -gear.shift_factor if is_ring else gear.shift_factor,  # Normal shift
-        7,                              # Quality Grade (ISO) — kept as-is
+        7 if is_ring else 6,          # Quality Grade (ISO): Sun/Planet=6, Annulus=7
         "Default",                      # Material — kept as-is
         "g26",                          # Tooth Thickness Tolerance — kept as-is
         gear.dedendum_factor if is_ring else gear.addendum_factor,   # Addendum
@@ -785,23 +791,28 @@ def _input_model_csv_rows() -> list[list[object]]:
         rows.append(_input_model_gear_row("Planetary Gear Set 2", "Annulus",
                                           gears["Gr2"], center_dist, planets))
 
-    # Carrier pin: the smaller of the two planet offset-circle dia minus twice
-    # the matching planet's module.
+    # Carrier pin: the smaller of the planet pitch-circle dia minus ten
+    # times the matching planet's module (fractional part truncated).
     planets_gears = [gears["Gp1"]] + ([gears["Gp2"]] if stage2 else [])
-    pin_gear = min(planets_gears, key=_offset_circle_dia)
-    carrier_pin = _offset_circle_dia(pin_gear) - 2 * pin_gear.module
+    pin_gear = min(planets_gears, key=_pitch_circle_dia)
+    carrier_pin = math.floor(
+        _pitch_circle_dia(pin_gear) - 10 * pin_gear.module)
 
-    # Carrier thicknesses: half the face width of each stage's planet gear.
-    thick_in = gears["Gp1"].module * 5 / 2
-    thick_out = (gears["Gp2"].module if stage2 else gears["Gp1"].module) * 5 / 2
+    # Carrier thicknesses: same as the planet Face Width of each stage.
+    thick_in = gears["Gp1"].module * 5
+    thick_out = (gears["Gp2"].module if stage2 else gears["Gp1"].module) * 5
 
-    shaft_dia = _offset_circle_dia(gears["Gs1"]) - 2 * gears["Gs1"].module
+    # Input shaft: Sun pitch-circle dia minus ten times the Sun module
+    # (fractional part truncated).
+    shaft_dia = math.floor(
+        _pitch_circle_dia(gears["Gs1"]) - 10 * gears["Gs1"].module)
 
-    # Frame outer diameter: the larger of the two ring offset-circle dia plus
-    # four times the matching ring's module.
+    # Frame outer diameter: the larger of the ring pitch-circle dia plus
+    # forty times the matching ring's module (fractional part truncated).
     rings_gears = [gears["Gr1"]] + ([gears["Gr2"]] if stage2 else [])
-    frame_gear = max(rings_gears, key=_offset_circle_dia)
-    frame_outer = _offset_circle_dia(frame_gear) + 4 * frame_gear.module
+    frame_gear = max(rings_gears, key=_pitch_circle_dia)
+    frame_outer = math.floor(
+        _pitch_circle_dia(frame_gear) + 40 * frame_gear.module)
 
     rows.append(["ETC", "Carrier",
                  "", "", "", "", "", "", "", "", "", "", "", "", "", "",
