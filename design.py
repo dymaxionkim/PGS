@@ -26,9 +26,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import FGPG2_CLI
+import interference
 from CPG import CPG
 from GPG import GPG
-from PGS import PGS
+from PGS import PGS, ring_shift_factor
 
 DEFAULT_SCALE = 0.7
 PLOT_DPI = 100
@@ -78,6 +79,10 @@ DEFAULT_INPUTS = {
     "alpha": 20,
     "C": 0.2,
     "E": 0.01,
+    "mu": 0.08,
+    "mu_b": 0.002,
+    "seal": 0.01,
+    "churn": 0.005,
     "PlotOption": 3,
     "TeethType": "Involute Teeth",
     "Zr2": 54.0,
@@ -107,6 +112,43 @@ GEAR_INPUTS = [
     ("C", "Hob end radius, C", "[mm]", False),
     ("E", "Tooth end radius, E", "[mm]", False),
 ]
+
+LOSS_INPUTS = [
+    ("mu", "Friction coeff, μ", "or custom", False),
+    ("mu_b", "Bearing coeff, μb", "or custom", False),
+    ("seal", "Seal loss, ζs", "or custom", False),
+    ("churn", "Churning coeff, kc", "@1000rpm", False),
+]
+
+# Editable combobox presets for loss parameters (any custom non-negative
+# number may also be typed directly).
+LOSS_PRESETS: dict[str, list[tuple[str, float]]] = {
+    "mu": [
+        ("0.08 (Grease)", 0.08),
+        ("0.05 (Oil)", 0.05),
+    ],
+    "mu_b": [
+        ("0.002 (Ball/Needle)", 0.002),
+        ("0.005 (Roller)", 0.005),
+        ("0.05 (Bushing)", 0.05),
+        ("0.0 (None)", 0.0),
+    ],
+    "seal": [
+        ("0.01 (Lip seal)", 0.01),
+        ("0.005 (Low-fric)", 0.005),
+        ("0.02 (Double-lip)", 0.02),
+        ("0.0 (None)", 0.0),
+    ],
+    "churn": [
+        ("0.005 (Grease)", 0.005),
+        ("0.015 (Oil splash)", 0.015),
+        ("0.002 (Oil mist)", 0.002),
+        ("0.0 (None)", 0.0),
+    ],
+}
+LOSS_PRESET_OPTIONS: dict[str, list[str]] = {
+    key: [label for label, _ in items] for key, items in LOSS_PRESETS.items()
+}
 
 PLOT_ITEMS = [
     ("Gs1", 11),
@@ -159,6 +201,7 @@ textbox: tk.Text
 P1: PGS
 gears: dict[str, GPG | CPG]
 gears_second: dict[str, GPG | CPG] | None = None
+interference_reports: list[interference.ProfileInterferenceReport] = []
 save_button: ttk.Button | None = None
 
 
@@ -195,6 +238,26 @@ def _apply_params(g: dict[str, GPG | CPG]) -> None:
         g["Gp2"].shift_factor = float(entries["Gp2X"].get())
 
 
+def _parse_loss_param(raw: str, name: str = "loss parameter") -> float:
+    """Parse a non-negative loss parameter from a preset label or raw number."""
+    text = str(raw).strip()
+    m = re.match(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", text)
+    if not m:
+        raise ValueError(f"Invalid {name}: {raw!r}")
+    value = float(m.group(0))
+    if value < 0.0:
+        raise ValueError(f"{name} must be >= 0 (got {value})")
+    return value
+
+
+def _format_loss_option(key: str, value: float) -> str:
+    """Format ``value`` as a matching preset label for ``key``, else number."""
+    for label, preset in LOSS_PRESETS.get(key, ()):
+        if math.isclose(value, preset, rel_tol=0.0, abs_tol=1e-9):
+            return label
+    return f"{value:g}"
+
+
 def read_parameters() -> None:
     """Pull values from the input entries into the model objects."""
     global gears, gears_second
@@ -227,6 +290,12 @@ def read_parameters() -> None:
     P1.ns1 = float(entries["Ns1"].get())
     P1.shift_s1 = float(entries["Gs1X"].get())
     P1.shift_p1 = float(entries["Gp1X"].get())
+    P1.shift_p2 = float(entries["Gp2X"].get()) if is_wolfrom else 0.0
+    P1.addendum_factor = float(entries["A"].get())
+    P1.friction_coeff = _parse_loss_param(entries["mu"].get(), "friction coeff")
+    P1.bearing_coeff = _parse_loss_param(entries["mu_b"].get(), "bearing coeff")
+    P1.seal_loss = _parse_loss_param(entries["seal"].get(), "seal loss")
+    P1.churning_coeff = _parse_loss_param(entries["churn"].get(), "churning coeff")
     P1.pressure_angle = float(entries["alpha"].get())
 
     for g in [gears] + ([gears_second] if gears_second else []):
@@ -234,28 +303,8 @@ def read_parameters() -> None:
 
 
 def _ring_shift_factor(zp, xp, zr, module, dc, alpha_deg):
-    """Ring-gear profile shift for a zero-backlash internal mesh.
-
-    The planet (teeth ``zp``, shift ``xp``) meshes with the ring (``zr``
-    positive teeth) at the carrier radius ``dc``/2.  The operating
-    pressure angle of the mesh follows from the centre distance:
-
-        cos(a') = module * cos(a0) * (zr - zp) / dc
-
-    Matching the tooth thicknesses at the operating pitch point (the
-    planet tooth must exactly fill the ring tooth space) gives:
-
-        Xr = (zr - zp) * (inv(a0) - inv(a')) / (2 * tan(a0)) - xp
-
-    The backlash factor is deliberately left uncompensated so that the
-    B input keeps creating flank clearance as before.
-    """
-    a0 = np.deg2rad(alpha_deg)
-    cos_aw = np.clip(module * np.cos(a0) * (zr - zp) / dc, -1.0, 1.0)
-    aw = np.arccos(cos_aw)
-    inv_a0 = np.tan(a0) - a0
-    inv_aw = np.tan(aw) - aw
-    return (zr - zp) * (inv_a0 - inv_aw) / (2.0 * np.tan(a0)) - xp
+    """Ring-gear profile shift for a zero-backlash internal mesh."""
+    return ring_shift_factor(zp, xp, zr, module, dc, alpha_deg)
 
 
 def finalize_parameters(g: dict[str, GPG | CPG]) -> None:
@@ -280,21 +329,52 @@ def finalize_parameters(g: dict[str, GPG | CPG]) -> None:
     g["Gr1"].shift_factor = _ring_shift_factor(
         P1.zp1, g["Gp1"].shift_factor, -P1.zr1,
         P1.module1, P1.dc, g["Gp1"].pressure_angle)
-    g["Gr1"].pitch_circle_radius = (
-        P1.dc / 2.0
-        + P1.module1 * (P1.zp1 / 2.0 + g["Gp1"].shift_factor))
     if P1.is_wolfrom:
         g["Gs2"].shift_factor = -g["Gp2"].shift_factor
         g["Gr2"].shift_factor = _ring_shift_factor(
             P1.zp2, g["Gp2"].shift_factor, -P1.zr2,
             P1.module2, P1.dc, g["Gp2"].pressure_angle)
-        g["Gr2"].pitch_circle_radius = (
+
+    if isinstance(g["Gs1"], CPG):
+        # Cycloidal gears must share one circular pitch per meshing stage.
+        # Split the carrier centre distance dc/2 in proportion to tooth counts
+        # (operating module m_w) so Gs1, Gp1, Gr1 share pi*m_w1 and Gp2, Gr2
+        # share pi*m_w2 with tangent pitch circles and zero shift-induced gap.
+        if (P1.zs1 + P1.zp1) > 0.0:
+            m_w1 = P1.dc / (P1.zs1 + P1.zp1)
+            g["Gs1"].pitch_circle_radius = 0.5 * m_w1 * P1.zs1
+            g["Gp1"].pitch_circle_radius = 0.5 * m_w1 * P1.zp1
+            g["Gr1"].pitch_circle_radius = 0.5 * m_w1 * (-P1.zr1)
+        if P1.is_wolfrom and (-P1.zr2 - P1.zp2) > 0.0:
+            m_w2 = P1.dc / (-P1.zr2 - P1.zp2)
+            g["Gp2"].pitch_circle_radius = 0.5 * m_w2 * P1.zp2
+            g["Gr2"].pitch_circle_radius = 0.5 * m_w2 * (-P1.zr2)
+    else:
+        g["Gs1"].pitch_circle_radius = None
+        g["Gp1"].pitch_circle_radius = None
+        g["Gr1"].pitch_circle_radius = (
             P1.dc / 2.0
-            + P1.module2 * (P1.zp2 / 2.0 + g["Gp2"].shift_factor))
+            + P1.module1 * (P1.zp1 / 2.0 + g["Gp1"].shift_factor))
+        if P1.is_wolfrom:
+            g["Gp2"].pitch_circle_radius = None
+            g["Gr2"].pitch_circle_radius = (
+                P1.dc / 2.0
+                + P1.module2 * (P1.zp2 / 2.0 + g["Gp2"].shift_factor))
+
+
+def _active_profile_sets() -> list[tuple[str, dict[str, GPG | CPG]]]:
+    """Return ``(profile_name, gear_set)`` pairs for the currently selected profile(s)."""
+    primary_name = "Cycloid" if isinstance(gears.get("Gs1"), CPG) else "Involute"
+    active: list[tuple[str, dict[str, GPG | CPG]]] = [(primary_name, gears)]
+    if isinstance(gears_second, dict):
+        sec_name = "Cycloid" if isinstance(gears_second.get("Gs1"), CPG) else "Involute"
+        active.append((sec_name, gears_second))
+    return active
 
 
 def run_calc() -> None:
-    """Run PGS sizing and every gear's profile generation."""
+    """Run PGS sizing, every gear's profile generation and kinematic tip checks."""
+    global interference_reports
     P1.calc()
     P1.output()
     P1.checks_run()
@@ -312,6 +392,12 @@ def run_calc() -> None:
         if P1.is_wolfrom:
             for name in GEAR_ORDER[3:]:
                 gears_second[name].calc()
+
+    interference_reports = [
+        interference.check_profile_interference(P1, g_set, pname)
+        for pname, g_set in _active_profile_sets()
+    ]
+    interference.print_interference_summary(interference_reports)
 
 
 # --------------------------------------------------------------- helpers
@@ -336,6 +422,31 @@ _PLOT_CODE_KEYS = {
 }
 
 
+def _planet_self_spin(key: str, phi: float) -> float:
+    """Self-rotation angle of a planet placed at carrier orbit angle ``phi``.
+
+    Planet 0 (at ``phi = 0``, on the +y axis) is already phased to mesh with
+    Gs1, Gr1 and Gr2.  When planet ``i`` is placed at carrier angle ``phi``,
+    orbiting it rigidly without spinning around its own axis leaves its teeth
+    out of phase whenever ``Zs1`` or ``|Zr|`` is not a multiple of ``Np``
+    (non-factorizing designs).
+
+    Spinning planet ``i`` around its own centre before orbiting aligns the
+    meshing pitch arcs:
+      * Stage-1 planet (Gp1): ``+(Zs1 / Zp1) * phi`` matches Gs1 at every
+        planet and simultaneously matches Gr1 whenever the equal-distance
+        condition ``(Zs1 + |Zr1|) % Np == 0`` holds (equivalent modulo one
+        planet pitch to ``-(|Zr1| / Zp1) * phi``).
+      * Stage-2 planet (Gp2): ``-(|Zr2| / Zp2) * phi`` matches Gr2 at every
+        planet.
+    """
+    if key == "Gp1" and P1.zp1 > 0.0:
+        return (P1.zs1 / P1.zp1) * phi
+    if key == "Gp2" and P1.zp2 > 0.0:
+        return -(abs(P1.zr2) / P1.zp2) * phi
+    return 0.0
+
+
 def _plot_gear(key: str, g: dict, *, color, pitch_style, sun_angle: float) -> None:
     """Draw a single gear ``key`` from the gear set ``g``."""
     gear = g[key]
@@ -346,8 +457,16 @@ def _plot_gear(key: str, g: dict, *, color, pitch_style, sun_angle: float) -> No
     elif key.startswith("Gp"):
         array_angle = 2 * np.pi / P1.num_planets
         for i in range(P1.num_planets):
-            px, py = rotate(gear.plot_x, gear.plot_y, array_angle * i)
-            ppx, ppy = rotate(gear.pitch_circle_x, gear.pitch_circle_y, array_angle * i)
+            phi = array_angle * i
+            spin = _planet_self_spin(key, phi)
+            if spin != 0.0:
+                lx, ly = rotate(
+                    gear.plot_x - gear.x0, gear.plot_y - gear.y0, spin
+                )
+                px, py = rotate(lx + gear.x0, ly + gear.y0, phi)
+            else:
+                px, py = rotate(gear.plot_x, gear.plot_y, phi)
+            ppx, ppy = rotate(gear.pitch_circle_x, gear.pitch_circle_y, phi)
             plt.plot(px, py, color)
             plt.plot(ppx, ppy, pitch_style)
     else:  # ring
@@ -369,7 +488,7 @@ def _profile_set(cls: type) -> dict[str, GPG | CPG]:
 
 
 def _draw(keys: list[str], sets: list[tuple[dict, bool]],
-          out_path: str | None) -> None:
+          out_path: str | None, *, show: bool = True) -> None:
     """Draw ``keys`` from each ``(gear set, is_cycloid)`` pair on one figure.
 
     Saves the figure to ``out_path``, or shows it interactively when
@@ -380,7 +499,7 @@ def _draw(keys: list[str], sets: list[tuple[dict, bool]],
     # Sun rotation that keeps the sun teeth meshing with the planet array.
     sun_angle = 0.0
     first = sets[0][0]
-    if first["Gp1"].teeth % 2 == 0:
+    if round(first["Gp1"].teeth) % 2 == 0:
         sun_angle = (2 * np.pi / first["Gs1"].teeth) / 2
     for g, is_cyc in sets:
         # Cycloid (CPG) teeth use the brand colours; involute (GPG) keeps
@@ -404,7 +523,7 @@ def _draw(keys: list[str], sets: list[tuple[dict, bool]],
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         plt.savefig(out_path, dpi=PLOT_DPI)
         plt.close(plt.gcf())
-    else:
+    elif show:
         plt.show()
 
 
@@ -463,15 +582,54 @@ def save_pngs(out_dir: str) -> None:
             _draw(_PLOT_CODE_KEYS[code], [(involute, False), (cycloid, True)],
                   os.path.join(out_dir, f"All_{scope}.png"))
 
+    # Save zoomed worst-phase interference plots whenever a profile fails the
+    # kinematic 1-pitch tip interference check.
+    inv_rep = interference.check_profile_interference(P1, involute, "Involute")
+    if inv_rep.has_fail:
+        interference.plot_interference_report(
+            P1, involute, inv_rep,
+            out_path=os.path.join(out_dir, "TipCheck_Involute.png"),
+        )
+    if cycloid is not None:
+        cyc_rep = interference.check_profile_interference(P1, cycloid, "Cycloid")
+        if cyc_rep.has_fail:
+            interference.plot_interference_report(
+                P1, cycloid, cyc_rep,
+                out_path=os.path.join(out_dir, "TipCheck_Cycloid.png"),
+            )
+
+
+def plot_tip_check(*, only_if_fail: bool = False, show: bool = True) -> None:
+    """Display zoomed worst-phase tip-interference inspection figure(s)."""
+    active = dict(_active_profile_sets())
+    opened = False
+    for rep in interference_reports:
+        if only_if_fail and not rep.has_fail:
+            continue
+        g_set = active.get(rep.profile_name)
+        if g_set is None:
+            continue
+        interference.plot_interference_report(P1, g_set, rep, show=False)
+        opened = True
+    if opened and show:
+        plt.show()
+
 
 def plot_pgs() -> None:
-    """Interactive preview of the chosen PlotOption (no file output)."""
+    """Interactive preview of the chosen PlotOption (no file output).
+
+    When any active tooth profile fails the kinematic 1-pitch tip interference
+    check, also opens the zoomed worst-phase inspection window alongside the
+    main plot with interfering points highlighted in red.
+    """
     code = PLOT_LABEL_TO_CODE[entries["PlotOption"].get()]
     keys = _PLOT_CODE_KEYS.get(code, _PLOT_CODE_KEYS[3])
     sets = [(gears, isinstance(gears.get("Gp1"), CPG))]
     if isinstance(gears_second, dict):
         sets.append((gears_second, isinstance(gears_second.get("Gp1"), CPG)))
-    _draw(keys, sets, None)
+    _draw(keys, sets, None, show=False)
+    plot_tip_check(only_if_fail=True, show=False)
+    plt.show()
 
 
 # ----------------------------------------------------------- report builder
@@ -484,6 +642,7 @@ def _append_checks(lines: list[str]) -> None:
     lines.append("* Involute Interference Condition 1 : " + c.involute_interference_1 + "\n")
     lines.append("* Trimming Interference 1 : " + c.trimming_interference_1 + "\n")
     lines.append("* Teeth Numbers which is Integer 1 : " + c.teeth_number_integer_1 + "\n")
+    lines.extend(interference.format_report_lines(interference_reports))
     lines.append("\n")
 
 
@@ -511,7 +670,11 @@ def _append_inputs(lines: list[str]) -> None:
     lines.append("* Dedendum Factor, D = " + str(float(gears["Gs1"].dedendum_factor)) + "\n")
     lines.append("* Pressure Angle, alpha = " + str(float(gears["Gs1"].pressure_angle)) + "\n")
     lines.append("* Radius of Hib End, C = " + str(float(gears["Gs1"].hob_tip_radius_factor)) + "\n")
-    lines.append("* Radius of Tooth End, E = " + str(float(gears["Gs1"].tooth_tip_radius_factor)) + "\n\n")
+    lines.append("* Radius of Tooth End, E = " + str(float(gears["Gs1"].tooth_tip_radius_factor)) + "\n")
+    lines.append("* Friction Coeff, mu = " + str(float(P1.friction_coeff)) + "\n")
+    lines.append("* Bearing Coeff, mu_b = " + str(float(P1.bearing_coeff)) + "\n")
+    lines.append("* Seal Loss, zeta_s = " + str(float(P1.seal_loss)) + "\n")
+    lines.append("* Churning Coeff, kc = " + str(float(P1.churning_coeff)) + "\n\n")
 
 
 def _speed_lines(title: str, rows: list[tuple[str, float]]) -> str:
@@ -561,6 +724,7 @@ def _append_wolfrom(lines: list[str]) -> None:
          ("1st Ring Gear Speed (Gr1)", P1.n_g2_ring1),
          ("Planet Gear Speed (Gp1,Gp2)", P1.n_g2_planet),
          ("2nd Ring Gear Speed (Gr2)", P1.n_g2_ring2)]))
+    lines.extend(P1.efficiency_markdown_lines())
     lines.append("### Size\n")
     lines.append("* Sun1 = " + str(P1.ds1) + " [mm],  " + str(P1.zs1) + " [ea]\n")
     lines.append("* Planet1 = " + str(P1.dp1) + " [mm],  " + str(P1.zp1) + " [ea]\n")
@@ -594,6 +758,7 @@ def _append_simple(lines: list[str]) -> None:
          ("Carrier Speed", P1.n_rf_carrier),
          ("Ring Gear Speed (Gr1)", P1.n_rf_ring),
          ("Planet Gear Speed (Gp1)", P1.n_rf_planet)]))
+    lines.extend(P1.efficiency_markdown_lines())
     lines.append("### Size\n")
     lines.append("* Sun1 = " + str(P1.ds1) + " [mm],  " + str(P1.zs1) + " [ea]\n")
     lines.append("* Planet1 = " + str(P1.dp1) + " [mm],  " + str(P1.zp1) + " [ea]\n")
@@ -686,7 +851,7 @@ def _generate_fgpg2_results(folder: str, profile: str = "involute") -> None:
 def save_output(out_dir: str) -> None:
     """Write the Markdown report, model CSV and per-gear results."""
     os.makedirs(out_dir, exist_ok=True)
-    with open(out_dir + "/README.md", "w") as f:
+    with open(out_dir + "/README.md", "w", encoding="utf-8") as f:
         f.write(textbox.get("0.0", "end"))
     _write_input_model_csv(out_dir + "/model.csv")
     # Gear folders: the Stage-1 gears always, Stage-2 Gp2/Gr2 for the Wolfrom
@@ -887,6 +1052,10 @@ REPORT_KEY_TO_ENTRY = {
     "alpha": "alpha",
     "C": "C",
     "E": "E",
+    "mu": "mu",
+    "mu_b": "mu_b",
+    "zeta_s": "seal",
+    "kc": "churn",
 }
 
 
@@ -942,6 +1111,12 @@ def _apply_report_values(values: dict[str, str]) -> bool:
             except ValueError:
                 continue
             _set_entry_text(entry_key, str(number))
+        elif entry_key in LOSS_PRESETS:
+            try:
+                number = _parse_loss_param(value, entry_key)
+            except ValueError:
+                continue
+            entries[entry_key].set(_format_loss_option(entry_key, number))
         else:
             _set_entry_text(entry_key, value)
     return applied
@@ -998,6 +1173,14 @@ def button_run_callback() -> None:
     plot_pgs()
 
 
+def button_tip_check_callback() -> None:
+    """Run kinematic tip-interference check and open zoomed inspection plots."""
+    read_parameters()
+    run_calc()
+    build_report()
+    plot_tip_check(only_if_fail=False, show=True)
+
+
 def button_save_callback() -> None:
     """Save the result files into a user-selected folder.
 
@@ -1042,6 +1225,8 @@ def init_parameters() -> None:
             w.set(TYPE_CODE_TO_LABEL[default])
         elif key == "PlotOption":
             w.set(PLOT_CODE_TO_LABEL[default])
+        elif key in LOSS_PRESETS:
+            w.set(_format_loss_option(key, default))
         elif hasattr(w, "set"):        # ttk.Combobox
             w.set(str(default))
         else:                          # ttk.Entry
@@ -1110,6 +1295,9 @@ def _build_field(parent, row, key, label_text, hint_text, hint_below) -> int:
     if key == "TYPE":
         entry = ttk.Combobox(parent, values=TYPE_LABELS,
                              width=20, state="readonly")
+    elif key in LOSS_PRESET_OPTIONS:
+        entry = ttk.Combobox(parent, values=LOSS_PRESET_OPTIONS[key],
+                             width=20, state="normal")
     else:
         entry = ttk.Entry(parent)
     entry.grid(row=row, column=1, padx=PADX, pady=PADY, sticky="ew")
@@ -1197,13 +1385,29 @@ def build_gui() -> None:
     main.columnconfigure(1, weight=1)
     main.rowconfigure(0, weight=1)
 
-    # --- left column : inputs --------------------------------------------
+    # --- left column : scrollable inputs ---------------------------------
     left = ttk.Frame(main, style="App.TFrame")
-    left.grid(row=0, column=0, sticky="n", padx=(0, PAD))
-    container = ttk.Frame(left, style="App.TFrame")
-    container.grid(row=0, column=0, sticky="n")
+    left.grid(row=0, column=0, sticky="ns", padx=(0, PAD))
+    left.rowconfigure(0, weight=1)
+    left.columnconfigure(0, weight=1)
+
+    input_canvas = tk.Canvas(
+        left, background=BG, borderwidth=0, highlightthickness=0
+    )
+    input_canvas.grid(row=0, column=0, sticky="nsew")
+    input_vsb = ttk.Scrollbar(
+        left, orient="vertical", command=input_canvas.yview
+    )
+    input_vsb.grid(row=0, column=1, sticky="ns")
+    input_canvas.configure(yscrollcommand=input_vsb.set)
+
+    container = ttk.Frame(input_canvas, style="App.TFrame")
+    container_win = input_canvas.create_window(
+        (0, 0), window=container, anchor="nw"
+    )
     _build_section(container, "Planetary System", PLANETARY_INPUTS)
     _build_section(container, "Involute Gear Spec", GEAR_INPUTS)
+    _build_section(container, "Loss Parameters", LOSS_INPUTS)
     lf_plot = ttk.LabelFrame(container, text="Plot", padding=PAD)
     lf_plot.grid(sticky="ew")
     lf_plot.columnconfigure(1, weight=1)
@@ -1218,6 +1422,45 @@ def build_gui() -> None:
                             state="readonly")
     cb_teeth.grid(row=1, column=1, padx=PADX, pady=PADY, sticky="w")
     entries["TeethType"] = cb_teeth
+
+    def _sync_input_scrollregion(_event=None) -> None:
+        bbox = input_canvas.bbox("all")
+        if bbox is not None:
+            input_canvas.configure(scrollregion=bbox)
+        req_w = container.winfo_reqwidth()
+        if req_w > 1 and input_canvas.winfo_reqwidth() != req_w:
+            input_canvas.configure(width=req_w)
+
+    def _sync_container_width(event) -> None:
+        if event.width > 1:
+            input_canvas.itemconfigure(container_win, width=event.width)
+
+    def _scroll_inputs(event) -> str | None:
+        if "popdown" in str(event.widget):
+            return None
+        if input_canvas.yview() == (0.0, 1.0):
+            return "break"
+        if getattr(event, "num", None) == 4:
+            step = -1
+        elif getattr(event, "num", None) == 5:
+            step = 1
+        elif event.delta:
+            step = -1 if event.delta > 0 else 1
+        else:
+            return None
+        input_canvas.yview_scroll(step, "units")
+        return "break"
+
+    def _bind_input_wheel(widget) -> None:
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(seq, _scroll_inputs, add="+")
+        for child in widget.winfo_children():
+            _bind_input_wheel(child)
+
+    container.bind("<Configure>", _sync_input_scrollregion)
+    input_canvas.bind("<Configure>", _sync_container_width)
+    _bind_input_wheel(input_canvas)
+    _bind_input_wheel(container)
 
     # --- right column : result -------------------------------------------
     right = ttk.Frame(main, style="App.TFrame")
@@ -1236,8 +1479,25 @@ def build_gui() -> None:
     save_button.pack(side="right", padx=(0, PAD))
     ttk.Button(bar, text="Run", style="Accent.TButton",
                command=button_run_callback).pack(side="right", padx=(0, PAD))
+    ttk.Button(bar, text="Tip Check", style="TButton",
+               command=button_tip_check_callback).pack(side="right", padx=(0, PAD))
     ttk.Button(bar, text="Load", style="Accent.TButton",
                command=button_load_callback).pack(side="right", padx=(0, PAD))
+
+    # Size the window cleanly inside the display so the bottom action bar is
+    # never clipped; when all input cards exceed the window height, the left
+    # scrollbar makes every parameter reachable.
+    app.update_idletasks()
+    _sync_input_scrollregion()
+    app.update_idletasks()
+    screen_w = app.winfo_screenwidth()
+    screen_h = app.winfo_screenheight()
+    init_w = min(max(980, app.winfo_reqwidth() + 16), max(880, screen_w - 40))
+    init_h = min(
+        container.winfo_reqheight() + bar.winfo_reqheight() + PAD * 4 + 8,
+        max(520, screen_h - 100),
+    )
+    app.geometry(f"{init_w}x{init_h}")
 
 
 def main(argv: list[str] | None = None) -> None:

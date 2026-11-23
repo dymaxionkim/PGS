@@ -284,23 +284,20 @@ class CPG:
         self.pitch_angle = 2 * np.pi / z
         self.alpha_m = np.pi / z
 
-        # Tooth angular half-thickness at the pitch circle.  For a cycloidal
-        # gear the circular thickness at the pitch circle is
-        #     (2 * t_half) * rp = (pi/2 - B) * m
-        # i.e. it is made INDEPENDENT of the profile shift ``X`` (effective
-        # tooth count ``z + 2X``).  This is essential: with the old ``pi/(2z)``
-        # the thickness grew with X, so two equally-shifted mating gears both
-        # thickened and jammed.  Backlash is folded into t_half instead of
-        # rotating the flanks, because rotating a cycloid detaches it from the
-        # pitch point and destroys conjugacy.
-        zeff = z + 2.0 * X
-        self._t_half = (np.pi / 2.0 - B) / zeff
+        # Tooth angular half-thickness at the pitch circle.  Using ``z``
+        # directly (instead of ``z + 2*X``) splits each angular pitch ``2*pi/z``
+        # evenly into tooth ``(pi - 2B)/z`` and space ``(pi + 2B)/z`` at the
+        # operating pitch circle ``rp`` so zero backlash (``B = 0``) leaves no
+        # unintended flank gap.  When ``design.py`` supplies the shared stage
+        # operating pitch radii ``rp = m_w * z / 2``, mating gears share the
+        # exact same circular pitch ``pi * m_w`` and conjugate tooth thickness.
+        self._t_half = (np.pi / 2.0 - B) / z
 
         self.align_angle = np.pi / 2 - self._t_half  # tooth centre -> +y
 
         if self.pitch_circle_radius is not None:
-            # Internal ring gears: the layout fixes the pitch radius (it must
-            # satisfy the carrier/centre-distance), override the shifted value.
+            # Operating pitch radius set by the planetary layout (e.g. stage
+            # operating module m_w * z / 2 so sun/planet/ring share one pitch).
             rp = self.pitch_circle_radius
         else:
             rp = m * (z / 2 + X)
@@ -382,7 +379,11 @@ class CPG:
         rc = self._rc
         n = self.seg_involute
 
-        th_space = -self._t_half
+        # Half-tooth spans exactly half a pitch (alpha_m = pi / z), from the
+        # true valley midpoint (t_half - pi/z) to the tooth centre (+t_half).
+        # This keeps consecutive teeth joined seamlessly along the root circle
+        # with no chord jump for any backlash B.
+        th_space = self._t_half - self.alpha_m
         th_tooth = self._t_half
         dback = 0.0   # backlash is already in self._t_half
 

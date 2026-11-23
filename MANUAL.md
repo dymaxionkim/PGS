@@ -2,7 +2,7 @@
 
 _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 치수 결정 도구_
 
-이 문서는 `PGS.py`, `GPG.py`, `CPG.py`, `design.py` 소스 코드에 기반하여,
+이 문서는 `PGS.py`, `GPG.py`, `CPG.py`, `interference.py`, `design.py` 소스 코드에 기반하여,
 본 프로그램으로 **3K형 Wolfrom 유성기어장치(Wolfrom Gearbox)** 를 구성하고 설계하는 절차,
 핵심 알고리즘과 이론, 그리고 프로그램의 플로우차트를 설명한다.
 
@@ -28,6 +28,7 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 | `PGS.py` | 유성기어장치 치수 계산기 (치수 배치 해, 기어비, 기하학적 제약 검사) |
 | `GPG.py` | 인볼루트 치형 프로파일 생성기 (외/내접 기어 공용) |
 | `CPG.py` | 사이클로이드 치형 프로파일 생성기 (`GPG`와 동일 인터페이스의 교체용 모듈) |
+| `interference.py` | 1피치 운동학적 회전 스윕 이끝 간섭 검증기 및 최악 위상 확대 도면기 (Involute·Cycloid 공용) |
 | `FGPG2_CLI.py` | 이식된 FGPG2 CLI 진입점 (`FGPG2_CLI.py <Inputs.csv> [involute\|cycloid]`) — 기어별 Result 파일을 재생성 |
 | `PGS_CLI.py` | 명령줄(헤드리스) 실행기 — `.md` 리포트의 `## Input Parameters`를 읽어 GUI와 동일한 계산을 수행하고, SaveAll/SaveOK/SaveMD 옵션에 따라 결과 파일을 저장 (§2.9) |
 | `fgpg2/` | 프로젝트에 이식된 FGPG2 치형 생성 패키지 (`gear.py`, `cycloid.py`, `exporters.py`, `plotter.py`) — Save 시 `Result.csv`/`Result.dxf`/`Result1.png`/`Result2.png`를 인프로세스로 생성 |
@@ -118,6 +119,17 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 | Hob end radius, C | $C$ | 호브 선단 코너 반경 [mm] (루트 필렛 형상) |
 | Tooth end radius, E | $E$ | 치 끝단 라운딩 반경 [mm] |
 
+**손실 파라미터 ("Loss Parameters" 카드)** — 4개 항목 모두 편집 가능한 콤보박스로 제공되어 프리셋 선택 또는 0 이상 임의 수치 직접 입력이 가능하다(`0` 입력 시 해당 손실 제외):
+
+| 입력 항목 | 기호 | 프리셋 (기본값) | 의미 |
+|-----------|------|-----------------|------|
+| Friction coeff, μ | $\mu$ | `0.08 (Grease)` (기본), `0.05 (Oil)` | 기어 치면 미끄럼 마찰계수 |
+| Bearing coeff, μb | $\mu_b$ | `0.002 (Ball/Needle)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (None)` | 유성 핀 베어링 및 입·출력 지지 베어링 마찰계수 |
+| Seal loss, ζs | $\zeta_s$ | `0.01 (Lip seal)` (기본), `0.005 (Low-fric)`, `0.02 (Double-lip)`, `0.0 (None)` | 입·출력 축 실(Seal) 무부하 손실 비율 |
+| Churning coeff, kc | $k_c$ | `0.005 (Grease)` (기본), `0.015 (Oil splash)`, `0.002 (Oil mist)`, `0.0 (None)` | 기준 속도 `1000 rpm`에서의 윤활 교반(Churning) 손실 계수 — 입력 속도 $n_{s1}$ 과 연동 ($\propto (|n_{s1}|/1000)^2$) |
+
+> **GUI 스크롤바 안내**: 좌측 입력 패널(`Planetary System` · `Involute Gear Spec` · `Loss Parameters` · `Plot`)은 세로 스크롤바와 마우스 휠 스크롤을 지원하며, 초기 창 높이는 화면 해상도에 맞춰 자동 조정되어 하단 버튼 바가 잘리지 않는다.
+
 **참고 — 링기어 전위계수($x_{r1}, x_{r2}$)는 입력하지 않는다.**
 두 링기어의 전위계수는 프로그램이 캐리어 반경에서 "플랭크 여유 없는 무백래시 내접 물림"이 되도록 자동 산출한다(§3.5 참조). 입력한 $B$ 는 그 위에 덧붙는 플랭크 여유로 작동한다.
 
@@ -128,7 +140,7 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 - 개별 기어: `Gs1` / `Gp1` / `Gr1` (1단), `Gp2` / `Gr2` (2단, Wolfrom 한정) — 선택한 기어 하나만 도면
 - 구성 단위: `Stage1`(1단만) / `Stage2`(2단만, **Wolfrom 한정**) / `Total`(1·2단 전체 겹침 도면)
 - Simple에서는 1단 전용 옵션(`Stage1` / `Gs1` / `Gp1` / `Gr1`)만 제공된다.
-- 유성기어(`Gp1`, `Gp2`) 선택 시 `Np`개의 유성기어 배열이 그려진다.
+- 유성기어(`Gp1`, `Gp2`) 선택 시 `Np`개의 유성기어 배열이 그려진다. 이때 $i$번째 유성기어($\phi_i = 2\pi i / N_p$)는 공전 배치 전 자체 중심 기준 자전 위상($\beta_{p1,i} = +(Z_{s1}/Z_{p1})\phi_i$, $\beta_{p2,i} = -(|Z_{r2}|/Z_{p2})\phi_i$)으로 자동 정렬되므로, 연속 물림(비인수분해) 조합에서도 모든 유성기어가 태양·링기어와 정확히 맞물려 표시된다(§3.9 참조).
 
 색상 규칙: 1단 기어는 **회색 계열**(인볼루트 = `dimgray`, 사이클로이드 = `#95c4ed`), 2단 기어는 **검정/남색 계열**(인볼루트 = `black`, 사이클로이드 = `#19609d`)로 구분된다.
 
@@ -139,7 +151,7 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 
 > **참고 — 저장 시 산출 파일명**: `Plot option`과 무관하게 **전체 대상에 대해 도면을 모두 저장**한다. 파일명 규칙은 §2.6 Save 단계의 [결과 파일] 목록 참조.
 
-### 2.6 Step 5 — Run · Load · Save 버튼 (계산 · 재사용 · 파일 저장)
+### 2.6 Step 5 — Run · Tip Check · Load · Save 버튼 (계산 · 간섭 확인 · 재사용 · 파일 저장)
 
 **Run**을 누르면 계산·프리뷰만 수행되고 **파일은 저장되지 않는다**:
 
@@ -149,8 +161,11 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 4. `PGS.checks_run()` — 6종 기하학적 타당성 검사 (§3.6)
 5. `finalize_parameters()` — 링기어 전위계수 자동 산출 등 최종 파라미터 확정 (§3.5)
 6. 각 기어별 `GPG.calc()` — 6개 기어(또는 Simple은 3개)의 치형 점군 생성 (§3.7)
-7. `build_report()` — Markdown 보고서를 Result 패널에 표시
-8. `plot_pgs()` — 선택한 Plot option에 따라 인터랙티브 프리뷰만 표시 (Teeth profile이 `All`이면 두 치형 프로파일을 겹쳐 표시)
+7. `interference.check_profile_interference()` — 선택된 프로파일(`Involute` / `Cycloid` / `All` 양쪽 모두)에 대해 `Gs1-Gp1`, `Gp1-Gr1`, `Gp2-Gr2`(Wolfrom) 1피치 회전 스윕 이끝 간섭 검사 및 유성기어 상호 이끝 틈새 검사 수행
+8. `build_report()` — Markdown 보고서를 Result 패널에 표시 (`## Check Geometrical Conditions`에 운동학적 이끝 간섭 결과 포함)
+9. `plot_pgs()` — 선택한 Plot option에 따라 인터랙티브 프리뷰 표시. 운동학적 이끝 간섭에서 `Fail`이 검출되면 최악 위상 확대 검사 창을 자동으로 함께 띄워 간섭 지점을 빨간 점으로 강조 표시
+
+**Tip Check** 버튼을 누르면 계산을 실행하고, 간섭 통과(`OK`) 여부와 관계없이 현재 선택된 모든 프로파일(`Involute`, `Cycloid`, 또는 `All`)의 **최악 위상 확대 이끝 간섭 검사 창**을 즉시 열어 각 물림쌍의 밀착·틈새 상태를 시각적으로 확인할 수 있다. **Save** 시 간섭 `Fail`이 존재하는 프로파일은 `Result/TipCheck_Involute.png` / `Result/TipCheck_Cycloid.png`도 함께 저장된다.
 
 **Load**를 누르면 **파일 선택 대화상자**가 열리고, 원하는 경로의 **`README.md`** 파일(`Result/README.md` 등)을 고르면 그 파일의 `## Input Parameters` 섹션을 읽어 **UI의 파라미터 입력창을 자동으로 다시 채운다**. 이어서 Run과 동일하게 `read_parameters → run_calc → build_report → plot_pgs`를 수행하므로, 이전에 Save로 저장한 설계를 즉시 불러와 같은 값을 확인·이어서 수정할 수 있다.
 
@@ -160,11 +175,13 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 **Save**를 누르면 폴더 선택 대화상자가 열리고, 선택한 폴더 아래에 `Result/`를 만들고 **동일 계산을 재실행**하여 모든 산출물을 저장한다 (저장 중에는 Save 버튼이 비활성화되고 완료 후 다시 활성화된다).
 
 - `Result/README.md` — 보고서 (Result 패널과 동일 내용)
+- `Result/model.csv` — 기어·캐리어·축·프레임 치수를 요약한 입력 모델 테이블
 - `Result/Involute_*.png`, `Result/Cycloid_*.png`, `Result/All_*.png` — **전체 대상에 대한 치형 도면**
   - 명명 규칙: `{Involute|Cycloid}_` 접두사 + 범위(`Stage1`/`Stage2`/`Total` 또는 기어명 `Gs1`/`Gp1`/`Gr1`/`Gp2`/`Gr2`)
   - `All_*`는 **각 보기**(전체·기어별)별 겹침 도면으로, 3K-Wolfrom은 `All_Total`, `All_Gs1`, `All_Gp1`, `All_Gr1`, `All_Gp2`, `All_Gr2` 6종, Simple은 `All_Stage1`, `All_Gs1`, `All_Gp1`, `All_Gr1` 4종
   - 합계: 3K-Wolfrom은 `Involute_`/`Cycloid_` 각 8개 + `All_` 6개 = **22개**, Simple은 각 4개 + 4개 = **12개**
   - 사이클로이드 기하 생성이 불가능하면(예: 비정수 $Z_{s2}$) 콘솔에 `WARN`을 출력하고 **Cycloid/All 도면만 건너뛴다** (인볼루트 도면·보고서·기어별 결과는 정상 저장).
+- `Result/TipCheck_Involute.png`, `Result/TipCheck_Cycloid.png` — 운동학적 1피치 이끝 간섭 검사에서 `Fail`이 발생한 프로파일에 한해 최악 위상 확대 도면을 추가 저장
 - `Result/<Gear>/Inputs.csv` — 기어별 가공입력 (Gs1, Gp1, Gr1, [+Gp2, Gr2]; Gs2 제외)
 - `Result/<Gear>/{Involute,Cycloid}/` — 프로파일별 FGPG2 결과
   - `Inputs.csv` + `Result.csv`(치형 좌표) + `Result.dxf`(절삭 도면) + `Result1.png`(치형 개수 view) + `Result2.png`(닫힌 치형 view) — `FGPG2_CLI.py <csv> [involute|cycloid]`를 인프로세스로 호출해 생성
@@ -173,10 +190,11 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 
 Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
 
-- **Check Geometrical Conditions** — 6종(1단) 검사 전부가 통과("OK")될 때까지 Step 2~4의 값을 바꾸며 반복한다.
-  - 실패 시의 조정 방향 예시: `Equal Distance` 실패 → $Z_{s1}$·$Z_{r1}$·$N_p$ 조합 변경 / `Planets Interference` 실패 → $N_p$ 축소 또는 유성 치수 $Z_{p1}=(|Z_{r1}|-Z_{s1})/2$ 축소 / `Trimming Interference` 실패 → $|Z_{r1}|-Z_{p1} \ge 16$ 가 되도록 링·유성 치수 차 확대. 검사는 **1단 기어만** 보므로, 감속비는 2단 입력($Z_{r2}$, $Z_{p2}$, $m_2$)으로 조정하고 1단 검사는 $Z_{s1}$·$Z_{r1}$·$N_p$ 로 통과시킨다.
+- **Check Geometrical Conditions** — 1단 해석적 검사 6종과 선택 프로파일의 **운동학적 1피치 이끝 간섭 검사(`Kinematic Tip Interference [...]`)** 전부가 통과("OK")될 때까지 Step 2~4의 값을 바꾸며 반복한다.
+  - 실패 시의 조정 방향 예시: `Equal Distance` 실패 → $Z_{s1}$·$Z_{r1}$·$N_p$ 조합 변경 / `Planets Interference` 실패 → $N_p$ 축소 또는 유성 치수 $Z_{p1}=(|Z_{r1}|-Z_{s1})/2$ 축소 / `Trimming Interference` 실패 → $|Z_{r1}|-Z_{p1} \ge 16$ 가 되도록 링·유성 치수 차 확대 / `Kinematic Tip Interference` 실패 → `Tip Check` 확대 도면의 빨간 간섭 지점을 확인하여 $A, D, C, B$ 또는 잇수·전위를 조정.
 - **Ratio** — 각 단 및 전체 기어비 (§3.4의 정의대로 출력됨)
 - **Speed** — 조립 구성별 운전 속도 (Wolfrom 3종 §3.4-e, Simple 2종 §3.4-f)
+- **Efficiency & Backdrivability** — 4대 손실($\mu, \mu_b, \zeta_s, k_c$, 입력속도 $n_{s1}$) 기준 물림·베어링·기생 손실 내역, 구성별 총 정구동($\eta_F$)·역구동($\eta_R$) 예상 효율, 3단계 상세 역구동 판정(`Good` / `Marginal` / `Self-Locking`, Type-3K의 임계 자가잠금 마찰계수 $\mu_{\text{lock}}$ 포함) 및 최종 2단계 결론(`Possible` / `Not Possible`) (§3.8 참조)
 - **Size** — 기어들의 피치원 직경과 치수, 캐리어 반경 (Simple은 1단 3개만)
 - **기어별 스펙(### Gs1, Gp1, Gr1, Gp2, Gr2)** — 도면화용 치형 상세 파라미터. 가상 2단 태양기어 `Gs2` 스펙은 보고서에 출력되지 않는다.
 
@@ -185,11 +203,11 @@ Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
 ### 2.8 설계 순서 요약 (한 장 요약)
 
 ```
-감속비 요구치 결정 → Type 선택 → (Np, m1, m2, Zs1·Zr1, 그리고 Wolfrom은 Zp2·Zr2) 입력
-→ 전위·백래시·치형 파라미터 입력 → Run (계산·프리뷰만)
-→ 자동: 치수 배치 해(Zp1, Zs2), 기어비, 링 전위계수, 치형 도면
-→ 기하 검사 6종(1단) 통과 여부 확인 → 미달이면 입력 변경 후 재실행(반복)
-→ 전부 OK면 Save → 선택 폴더에 Result/ 생성 (README.md · 도면 PNG · 기어별 CSV·FGPG2 산출물)
+감속비 요구치 결정 → Type 선택 → (Np, m1, m2, Zs1·Zr1, 그리고 Wolfrom은 Zp2·Zr2, ns1) 입력
+→ 전위·백래시·치형 및 손실 파라미터(μ, μb, ζs, kc) 입력 → Run (계산·프리뷰만)
+→ 자동: 치수 배치 해(Zp1, Zs2), 기어비, 운전속도, 효율·역구동 판별, 링 전위계수, 치형 도면, 1피치 이끝 간섭 검사
+→ 기하 검사 6종 + 운동학적 이끝 간섭 검사 통과 여부 확인 (필요 시 Tip Check로 확대 점검) → 미달이면 입력 변경 후 재실행(반복)
+→ 전부 OK면 Save → 선택 폴더에 Result/ 생성 (README.md · model.csv · 도면 PNG · 기어별 CSV·FGPG2 산출물)
 → 이후 이어서 설계할 때는 Load로 이전 Result/README.md 선택 → 파라미터 자동 재입력
 → 헤드리스 재계산·재저장은 CLI PGS_CLI.py <README.md> [SaveAll|SaveOK|SaveMD] 로 (§2.9)
 ```
@@ -220,7 +238,9 @@ uv run PGS_CLI.py <README.md> [SaveAll|SaveOK|SaveMD]
 | $Z_{s2}, Z_{p2}, Z_{r2}$ | 2단 태양·유성·링 치수 ($Z_{r2}<0$: 내치) | $N_p$ | 유성기어 개수 |
 | $d_{s}, d_{p}, d_{r}$ | 각 기어 피치원 직경 ($=mZ$) | $d_c$ | 캐리어(피치) 직경 |
 | $x$ | 전위계수 | $\alpha_0$ | 압력각, $a_0=\alpha_0\,[\text{rad}]$ |
-| $A, D, B, C, E$ | 임의 높이·깊이·백래시·호브선단·치선단 계수 | | |
+| $A, D, B, C, E$ | 임의 높이·깊이·백래시·호브선단·치선단 계수 | $\mu, \mu_{\text{lock}}$ | 치면 마찰계수, 임계 자가잠금 마찰계수 |
+| $\varepsilon_\alpha, H_v$ | 정면 물림률, 치면 손실 계수 | $\eta_F, \eta_R$ | 정구동(Forward)·역구동(Reverse) 예상 효율 |
+| $\mu_b, \zeta_s, k_c$ | 베어링 마찰·실 손실·교반 손실(@1000 rpm) 계수 | $d_{\text{pin}}, v_{t,s1}$ | 유성 핀 직경 [mm], 태양기어 피치선속도 [m/s] |
 
 ### 3.2 치수 배치 해 (Teeth Layout Solver) — `PGS.calc()`
 
@@ -603,7 +623,7 @@ r_{root} &= r_p - D\,m, &&(\text{디덴덤(이뿌리) 원 반경})\\[4pt]
 \end{aligned}
 ```
 
-단, 내접(링) 기어(`teeth < 0`)의 경우 `finalize_parameters`가 주입한 **작도용 운용 피치원 반경** $r_p = d_c/2 + m(Z_p/2 + x_p)$ 을 우선 사용한다. 굴림원 반경 $r$ 은 외측·내측 플랭크 모두 동일한 값을 사용한다.
+단, `design.py`의 `finalize_parameters()`는 1단(`Gs1`, `Gp1`, `Gr1`)과 2단(`Gp2`, `Gr2`)이 각 단에서 동일한 원주 피치를 공유하도록 **운용 모듈 기반 피치원 반경** $r_p = m_w |Z| / 2$ (§3.7-(7-e) 참조)을 주입해 우선 사용한다. 굴림원 반경 $r$ 은 외측·내측 플랭크 모두 동일한 값을 사용한다.
 
 기하 성립 조건:
 
@@ -695,31 +715,40 @@ $\varphi$ 가 증가하면 곡선은 시계 방향으로 피치원 안쪽으로 
 \varphi_{root} = 2\arcsin\sqrt{\frac{r_p^2-r_{root}^2}{4r(r_p-r)}}
 ```
 
-#### (7-e) 치두께와 백래시 — 전위 독립적 치 반각
+#### (7-e) 운용 모듈 기반 피치원 통일, 치두께 및 백래시
 
-사이클로이드 기어에서 백래시 $B$ 는 플랭크를 **회전**시키는 대신 치 두께를 직접 조절한다. 전위 $X$ 가 있을 때의 **유효 치수(effective tooth count)**:
+사이클로이드 기어는 맞물리는 기어들이 **동일한 원주 피치**를 가져야 의도하지 않은 치면 틈새 없이 공액(conjugate) 맞물림이 성립한다. 전위 $X$ 로 인해 캐리어 중심거리 $a_w = d_c/2$ 가 변하면, 각 단의 운용 모듈 $m_w$ 로 피치원 반지름을 잇수비대로 통일한다:
 
 ```math
-Z_{eff} = Z + 2X
+\begin{aligned}
+m_{w1} &= \frac{d_c}{Z_{s1} + Z_{p1}}, &
+r_{w,s1} &= \frac{m_{w1} Z_{s1}}{2},\quad
+r_{w,p1} = \frac{m_{w1} Z_{p1}}{2},\quad
+r_{w,r1} = \frac{m_{w1} |Z_{r1}|}{2},\\[4pt]
+m_{w2} &= \frac{d_c}{|Z_{r2}| - Z_{p2}}, &
+r_{w,p2} &= \frac{m_{w2} Z_{p2}}{2},\quad
+r_{w,r2} = \frac{m_{w2} |Z_{r2}|}{2}
+\end{aligned}
 ```
 
-피치원에서의 **치 반각(half tooth-pitch angle)**:
+이때 피치원에서의 **치 반각(half tooth-pitch angle)**과 **잇홈 중심각($\theta_{\text{space}}$)**은:
 
 ```math
 \boxed{
-t_{half} = \frac{\pi/2 - B}{Z_{eff}} = \frac{\pi/2 - B}{Z + 2X}
+t_{half} = \frac{\pi/2 - B}{Z}, \qquad
+\theta_{\text{space}} = t_{half} - \frac{\pi}{Z} = -\frac{\pi/2 + B}{Z}
 }
 ```
 
-이때 피치원에서의 **원호 치두께(circular tooth thickness)**:
+운용 피치원에서의 **원호 치두께(circular tooth thickness)**와 **잇홈 폭(space width)**은:
 
 ```math
-s_p = 2\,t_{half}\,r_p = \frac{(\pi/2 - B)\,m\,(Z+2X)}{Z+2X} = \frac{\pi m}{2} - Bm
+s_p = 2\,t_{half}\,r_w = \left(\frac{\pi}{2} - B\right) m_w, \qquad
+w_p = \frac{2\pi r_w}{Z} - s_p = \left(\frac{\pi}{2} + B\right) m_w
 ```
 
-**핵심 성질**: 원호 치두께 $s_p$ 는 전위 $X$ 와 **무관**하게 항상 $\pi m/2 - Bm$ 이다. 인볼루트와 달리 전위를 올려도 치가 두꺼워지지 않으므로, 맞물림 상대 기어와의 간섭(끼임) 문제가 발생하지 않는다. 이것이 사이클로이드 기어가 전위를 자유롭게 사용할 수 있는 이론적 근거이다.
-
-백래시가 0($B=0$)이면 피치원에서의 치두께와 잇홈(.spaceBetween)이 정확히 같아진다($\pi m/2$).
+- **핵심 성질**: 1단(`Gs1`·`Gp1`·`Gr1`)과 2단(`Gp2`·`Gr2`)이 각각 동일한 원주 피치 $\pi m_w$ 를 공유하므로, 전위 $X$ 와 무관하게 $B=0$ 일 때 치두께와 잇홈 폭이 정확히 일치하여($s_p = w_p = \pi m_w/2$) 의도하지 않은 치면 Gap이 발생하지 않는다.
+- 반쪽 치형이 $\theta_{\text{space}} = t_{half} - \pi/Z$ 부터 $+t_{half}$ 까지 정확히 반 피치($\pi/Z$)를 차지하므로, 미러링 후 인접 치들이 이뿌리원 위에서 누락·직선 단락 없이 매끄럽게 이어진다.
 
 #### (7-f) 치끝·루트 라운드 — 접선 필렛
 
@@ -746,7 +775,7 @@ C &= P_i + \rho\,\hat{n}_i,\\[2pt]
 
 #### (7-g) 반쪽 치형 조립과 전체 치 배열
 
-1. **반쪽 치형(half tooth)** — 루트 호 → 루트 라운드 → 내사이클로이드 → 외사이클로이드 → 치끝 라운드 → 치끝 호의 순서로 세그먼트를 연결한다. 이는 잇홈 중심($\theta = -t_{half}$)에서 치 중심($\theta = +t_{half}$)까지의 점군이다.
+1. **반쪽 치형(half tooth)** — 루트 호 → 루트 라운드 → 내사이클로이드 → 외사이클로이드 → 치끝 라운드 → 치끝 호의 순서로 세그먼트를 연결한다. 이는 실제 잇홈 중심($\theta_{\text{space}} = t_{half} - \pi/Z$)에서 치 중심($\theta = +t_{half}$)까지의 정확히 반 피치($\pi/Z$) 점군이다.
 
 2. **미러링** — 반쪽 치형을 치 중심선(각도 $t_{half}$)을 기준으로 $y$축 미러링하여 완전한 치형을 만든다. 미러 변환:
 
@@ -801,10 +830,176 @@ A \leftrightarrow D,\quad C \leftrightarrow E
 | 압력각 | 상수 $\alpha_0$ (항상 일정) | 롤각에 따라 연속 변화 |
 | 콩주(conjugacy) | 기원 원의 둘레에서 일정한 속도비 | 피치점에서만 정확히 접촉 |
 | 백래시 적용 | 플랭크 회전 | 치두께 직접 조절 ($t_{half}$) |
-| 전위 효과 | 치두께 변화 → 간섭 위험 | 치두께 불변 ($\pi m/2 - Bm$) |
+| 전위 효과 | 치두께 변화 → 운용 압력각 $\alpha_w$ 로 흡수 | 단별 운용 모듈 $m_w$ 통일로 피치 일치 ($s_p = (\pi/2 - B) m_w$) |
 | 루트 필렛 | 트로코이드 (호브 궤적) | 접선 원호 필렛 |
 
 `design.py`에서는 사이클로이드 기어를 고유 색상(1단 `#95c4ed`, 2단 `#19609d`)으로 그린다.
+
+### 3.8 예상 효율 및 역구동 가능 여부 판별 — `PGS._calc_efficiency()`
+
+ISO/TR 14179-2 기반의 **4대 손실 통합 모델(치면 물림 + 베어링 + 실 + 속도 연동 교반 손실)**과 **고정 캐리어(캐리어 좌표계 상대 동력 흐름) 효율 해석법**을 결합하여, Simple 및 3K-Wolfrom의 모든 조립 구성에 대해 **총 정구동 효율($\eta_F$)**, **총 역구동 효율($\eta_R$)**, **역구동 가능 여부(3단계 상세 판정 + 2단계 최종 결론)**를 산출한다.
+
+#### (1) 개별 치면 물림 손실 ($\psi_1, \psi_2, \psi_3$)과 치면 손실 계수 ($H_v$)
+
+고정 캐리어 기준에서 각 물림쌍의 치면 마찰 손실률 $\psi_i$ 와 순수 치면 물림 효율 $\eta_{\text{mesh},i} = \max(0,\, 1 - \psi_i)$ 는 다음과 같다.
+
+```math
+\begin{aligned}
+\psi_1 &= \mu \pi \left(\frac{1}{Z_{s1}} + \frac{1}{Z_{p1}}\right) H_{v1} && (\text{1단 외접: } \mathrm{Gs1}\text{--}\mathrm{Gp1}),\\[4pt]
+\psi_2 &= \mu \pi \left(\frac{1}{Z_{p1}} - \frac{1}{|Z_{r1}|}\right) H_{v2} && (\text{1단 내접: } \mathrm{Gp1}\text{--}\mathrm{Gr1}),\\[4pt]
+\psi_3 &= \mu \pi \left(\frac{1}{Z_{p2}} - \frac{1}{|Z_{r2}|}\right) H_{v3} && (\text{2단 내접: } \mathrm{Gp2}\text{--}\mathrm{Gr2, Wolfrom})
+\end{aligned}
+```
+
+각 물림쌍의 운용 압력각 $\alpha_w$ 와 접근/후퇴 물림률($\varepsilon_1, \varepsilon_2$, 정면 물림률 $\varepsilon_\alpha = \varepsilon_1 + \varepsilon_2$)을 실제 치형 치수($Z, m, x, A, \alpha_0, d_c$ 및 §3.5의 자동 링 전위 $x_{r1}, x_{r2}$)로부터 계산한다. 작용선 위의 정규화 물림 구간 $[-\varepsilon_1,\, +\varepsilon_2]$ 에서 동시 물림 잇수 $N(s)$ 에 따른 하중 분담 $w(s) = 1/N(s)$ 를 적분하여 치면 손실 계수 $H_v$ 를 구한다.
+
+```math
+H_v = 2 \int_{-\varepsilon_1}^{\varepsilon_2} \frac{|s|}{N(s)}\,ds
+```
+
+- 표준 피치점 통과 물림($0 \le \varepsilon_1, \varepsilon_2 \le 1$, $1 \le \varepsilon_\alpha \le 2$)에서는 잘 알려진 Ohlendorf 공식 $H_v = 1 - \varepsilon_\alpha + \varepsilon_1^2 + \varepsilon_2^2$ 과 정확히 일치한다.
+- Wolfrom 2단 내접처럼 링 전위가 커서 물림 구간이 피치점 한쪽으로 치우친 경우나 고물림률($\varepsilon_\alpha > 2$)에서도 구간 적분으로 정확히 계산된다.
+- 기하 검사 미통과 등으로 물림률 산출이 불가능한 비정상 기하에서는 단순 Merritt 근사($H_v = 1.0$)로 안전 폴백하며 출력에 주석(`*fallback Hv=1.0`)을 남긴다.
+
+#### (2) 베어링 · 실 · 입력속도 연동 교반(Churning) 손실
+
+1. **베어링 손실 (부하 의존, $\mu_b$)**
+   - **유성 핀 베어링 (캐리어 순환 루프 내부)**: `model.csv`의 캐리어 핀 직경 규칙 $d_{\text{pin}} = \mathrm{clip}(d_{p,\min} - 10 m_{\min},\; 0.25\,d_{p,\min},\; 0.70\,d_{p,\min})$ 을 사용하여 각 물림의 핀 베어링 손실률을 구하고, 캐리어 좌표계 유효 물림 효율 $\eta_i$ 에 직접 차감한다.
+
+```math
+\psi_{b,1} = \psi_{b,2} = \frac{\mu_b}{\cos\alpha_0}\frac{d_{\text{pin}}}{d_{p1}}, \qquad
+\psi_{b,3} = \frac{\mu_b}{\cos\alpha_0}\frac{d_{\text{pin}}}{d_{p2}}, \qquad
+\eta_i = \max\!\big(0,\; 1 - \psi_i - \psi_{b,i}\big)
+```
+
+   - **입·출력 축 지지 베어링 (외부 직렬)**: 2개 지지 축의 베어링 효율을 $\eta_{b,\text{shaft}} = \max\!\left(0,\, 1 - \dfrac{0.5\,\mu_b}{\cos\alpha_0}\right)^2$ 로 반영한다.
+
+2. **실(Seal) 손실 (무부하 기생 손실, $\zeta_s$)**
+   - 하우징 입·출력 축 실의 무부하 마찰 손실 비율 $\zeta_s$ 를 기생 손실로 차감한다.
+
+3. **교반(Churning) 손실 (무부하·속도 의존 기생 손실, $k_c$, $n_{s1}$)**
+   - 윤활유·그리스 교반 동력 손실은 회전수의 세제곱($P_{VZ0}\propto \omega^3$), 정격 전달 동력은 회전수에 비례($P_{\text{in}}\propto \omega$)하므로, 교반 손실 비율은 **입력 속도 $n_{s1}$ 의 제곱**에 비례한다(기준 속도 $n_{\text{ref}} = 1000\text{ [rpm]}$).
+
+```math
+\zeta_{\text{churn}}(n_{s1}) = k_c \left(\frac{|n_{s1}|}{1000}\right)^2, \qquad
+\zeta_{\text{parasitic}} = \zeta_s + \zeta_{\text{churn}}(n_{s1})
+```
+
+참고용으로 입력 태양기어 피치선속도 $v_{t,s1} = \dfrac{\pi d_{s1} |n_{s1}|}{60000}$ [m/s] 도 함께 출력된다.
+
+#### (3) 3K-Wolfrom 구성별 정구동($\eta_F$) · 역구동($\eta_R$) 효율
+
+캐리어 좌표계에서 복합 유성기어(`Gp1`+`Gp2`)의 동력 평형과 전체 토크 평형($T_{s1} + T_{r1} + T_{r2} = 0$)을 연립하여 부하 의존 효율($\eta_{F,\text{load}}, \eta_{R,\text{load}}$)을 구한 뒤, ISO/TR 14179-2 방식에 따라 기생 손실($\zeta_{\text{parasitic}} = \zeta_s + \zeta_{\text{churn}}$)을 차감한다.
+
+**A. Type-3K : Carrier Free, Ring1 Fixed, Ring2 Output (`g22`)** — 내부 순환 동력(recirculating power)이 존재하며, $l_2$ 가 $1$ 에 가까워질수록 효율이 급감하고 **자가잠금(Self-Locking)** 이 발생할 수 있다.
+
+$l_2 < 1$ (입력·출력 동방향 회전):
+
+```math
+\boxed{
+\begin{aligned}
+\eta_{F,\text{core}} &= \frac{1 + \eta_1 \eta_2 l_1}{1 + l_1} \cdot \frac{1 - l_2}{1 - \eta_2 \eta_3 l_2},\\[6pt]
+\eta_{R,\text{core}} &= \frac{\eta_1 (1 + l_1)}{\eta_3 (\eta_1 \eta_2 + l_1)} \cdot \frac{\eta_2 \eta_3 - l_2}{1 - l_2}
+\end{aligned}
+}
+```
+
+$l_2 > 1$ (입력·출력 역방향 회전):
+
+```math
+\boxed{
+\begin{aligned}
+\eta_{F,\text{core}} &= \frac{\eta_3 (\eta_2 + \eta_1 l_1)}{1 + l_1} \cdot \frac{l_2 - 1}{l_2 - \eta_2 \eta_3},\\[6pt]
+\eta_{R,\text{core}} &= \frac{\eta_1 (1 + l_1)}{\eta_1 + \eta_2 l_1} \cdot \frac{\eta_2 \eta_3 l_2 - 1}{l_2 - 1}
+\end{aligned}
+}
+```
+
+입·출력 축 베어링과 기생 손실(실·교반)을 포함한 총 효율:
+
+```math
+\begin{aligned}
+\eta_{F,\text{load}} &= \eta_{b,\text{shaft}}\,\eta_{F,\text{core}}, &
+\eta_F &= \max\!\big(0,\; \eta_{F,\text{load}} - \zeta_{\text{parasitic}}\big),\\[4pt]
+\eta_{R,\text{load}} &= \eta_{b,\text{shaft}}\,\eta_{R,\text{core}}, &
+\eta_R &= \eta_{R,\text{load}} - \zeta_{\text{parasitic}}
+\end{aligned}
+```
+
+- **자가잠금 조건 (역구동 불가)**: 치면+핀 베어링 순환 손실($\eta_2 \eta_3 \le \min(l_2,\, 1/l_2)$) 또는 기생 손실까지 합산한 총 역구동 효율 $\eta_R \le 0$ 일 때 역구동 불가가 된다.
+- **임계 자가잠금 마찰계수 ($\mu_{\text{lock}}$)**: 현재 입력된 베어링·실·교반 손실 조건을 유지한 상태에서 $\eta_R(\mu) = 0$ 이 되는 치면 마찰계수 $\mu_{\text{lock}}$ 을 수치 해(이분법)로 산출하여 함께 출력한다.
+
+**B. Ring2 Fixed, Carrier Output (`g1`)** — 링1이 유휴(무부하)이므로 Mesh 1과 Mesh 3만 거치는 2K-H 감속기($p_B = g_{r2p2}\,g_{p1s} = g_1 - 1$)와 동일하다:
+
+```math
+\eta_{F,\text{load}} = \eta_{b,\text{shaft}}\,\frac{1 + \eta_1 \eta_3 (g_1 - 1)}{g_1}, \qquad
+\eta_{R,\text{load}} = \eta_{b,\text{shaft}}\,\frac{\eta_1 \eta_3 g_1}{\eta_1 \eta_3 + (g_1 - 1)}
+```
+
+**C. Carrier Fixed, Ring2 Output (`g2`)** — 단순 직렬 2단 물림(순환 동력 없음):
+
+```math
+\eta_{F,\text{load}} = \eta_{R,\text{load}} = \eta_{b,\text{shaft}}\,\eta_1 \eta_3
+```
+
+(B·C 구성 역시 총 효율은 $\eta_{F,\text{load}} - \zeta_{\text{parasitic}}$, $\eta_{R,\text{load}} - \zeta_{\text{parasitic}}$ 로 계산된다.)
+
+#### (4) Simple (2K-H) 구성별 효율 및 다단 직렬 효율
+
+유효 물림 효율 $\eta_0 = \eta_1 \eta_2$, 잇수비 $p = |Z_{r1}|/Z_{s1}$ 에 대해 1단 부하 효율은:
+
+- **Carrier Fixed, Ring1 Output (`g4`)**: $\eta_{F,\text{load}}^{(1)} = \eta_{R,\text{load}}^{(1)} = \eta_{b,\text{shaft}}\,\eta_0$
+- **Ring1 Fixed, Carrier Output (`g3 = 1 + p`)**:
+
+```math
+\eta_{F,\text{load}}^{(1)} = \eta_{b,\text{shaft}}\,\frac{1 + p \eta_0}{1 + p}, \qquad
+\eta_{R,\text{load}}^{(1)} = \eta_{b,\text{shaft}}\,\frac{\eta_0 (1 + p)}{\eta_0 + p}
+```
+
+동일 단을 $k$ 단($k = 1, 2, 3$) 직렬 연결한 경우 부하 효율은 $(\eta_{\text{load}}^{(1)})^k$, 하우징 실 손실은 1회($\zeta_s$), 후단의 교반 손실은 단 감속비 $i$ 로 줄어든 회전수를 반영하여 $\zeta_{\text{churn}}^{(k)} = \sum_{j=0}^{k-1} \zeta_{\text{churn}}(n_{s1}/|i|^j)$ 로 합산된다.
+
+#### (5) 역구동 가능 여부 판별 체계 (3단계 상세 판정 + 2단계 최종 결론)
+
+총 역구동 효율 $\eta_R$ 을 기준으로 **3단계 상세 판정(`Backdrivability Assessment (3-Tier)`)**과 **단순 2단계 최종 결론(`Backdrivable (Conclusion)`)**을 함께 출력한다.
+
+| 역구동 효율 범위 | 3단계 상세 판정 | 2단계 최종 결론 | 공학적 해석 |
+|------------------|-----------------|-----------------|-------------|
+| $\eta_R \ge 20\%$ | `Good` | `Possible` | 여유 있게 원활한 역구동 가능 |
+| $0\% < \eta_R < 20\%$ | `Marginal` | `Possible` | 이론상 역구동 가능하나 정지마찰·저항 변동에 민감하여 실제 역구동이 어려울 수 있음 |
+| $\eta_R \le 0\%$ (또는 $l_2 = 1$) | `Self-Locking` | `Not Possible` | 치면·베어링·실·교반 손실 합산으로 역구동 불가 (보고서에는 $\eta_R = 0.00\%$ `(Self-Locking)` 표기) |
+
+#### (6) 손실 프리셋 활용 팁
+
+- 특정 손실 항목을 제외하고 순수 치면 효율만 확인하고 싶다면 `Loss Parameters` 카드에서 `μb`, `ζs`, `kc`를 `0.0 (None)`으로 선택하면 된다.
+- 고속 운전(예: $n_{s1} \ge 3000$ rpm)에서는 교반 손실이 속도의 제곱으로 커지므로, `Oil splash`(`0.015`) 대신 `Oil mist`(`0.002`)나 `Grease`(`0.005`)로 전환했을 때의 효율 차이를 바로 비교할 수 있다.
+
+### 3.9 운동학적 1피치 이끝 간섭 검증 및 유성기어 위상 정렬 — `interference.py` / `design.py`
+
+#### (1) 유성기어 배열 시 자전 위상 정렬 (`design._planet_self_spin()`)
+
+0번 유성기어($\phi_0 = 0$, $+y$ 축)는 `Gs1`·`Gr1`·`Gr2`와 정확히 맞물리도록 위상이 정렬되어 있다. 나머지 $i$번째 유성기어($\phi_i = 2\pi i / N_p$, $i = 1, \ldots, N_p - 1$)는 $Z_{s1}$이나 $|Z_r|$이 $N_p$의 배수가 아닌 비인수분해 조합에서 단순 공전만 시키면 치형 위상이 어긋나므로, 공전 배치 전에 자체 중심 $(0, d_c/2)$ 기준으로 다음 자전각을 먼저 적용한다:
+
+```math
+\beta_{p1,i} = +\frac{Z_{s1}}{Z_{p1}}\,\phi_i, \qquad
+\beta_{p2,i} = -\frac{|Z_{r2}|}{Z_{p2}}\,\phi_i
+```
+
+1단 등간 배치 조건 $(Z_{s1} + |Z_{r1}|) \bmod N_p = 0$ 이 성립하면 $\beta_{p1,i} \equiv -(|Z_{r1}|/Z_{p1})\phi_i \pmod{2\pi/Z_{p1}}$ 이므로, 모든 1단 유성기어가 태양기어와 링1기어에 동시에 정확히 맞물린다.
+
+#### (2) 1피치 양방향 회전 스윕 이끝 간섭 검사 (`interference.check_profile_interference()`)
+
+**Involute(`GPG`)와 Cycloid(`CPG`) 치형 모두**에 대해, 실제 생성된 치형 폐곡선(플랭크 + 치끝 라운드 `E` + 루트 필렛 `C` + 백래시 `B` 포함)을 캐리어 고정 좌표계에서 **정확히 1피치 주기** 동안 36스텝 회전시키며 양방향 침투 깊이를 측정한다:
+
+- **1단 외접 (`Gs1-Gp1`)**: $\theta_s \in [0,\, 2\pi/Z_{s1})$, $\;\theta_p = -(Z_{s1}/Z_{p1})\,\theta_s$ — `Gp1` 정점의 `Gs1` 내부 침범 및 `Gs1` 정점의 `Gp1` 내부 침범 양방향 검사
+- **1단 내접 (`Gp1-Gr1`)**: $\theta_p \in [0,\, 2\pi/Z_{p1})$, $\;\theta_r = +(Z_{p1}/|Z_{r1}|)\,\theta_p$ — `Gp1` 정점의 `Gr1` 경계 외부 돌출 및 `Gr1` 내치 정점의 `Gp1` 내부 침범 양방향 검사
+- **2단 내접 (`Gp2-Gr2`, Wolfrom)**: $\theta_{p2} \in [0,\, 2\pi/Z_{p2})$, $\;\theta_{r2} = +(Z_{p2}/|Z_{r2}|)\,\theta_{p2}$ — 동일 내접 양방향 검사
+- **유성기어 상호 이끝 틈새 (`Planets Stage1` / `Planets Stage2`)**: 실제 치형 최대 반경 $r_{\text{outer},p}$ 를 사용해 $d_c \sin(\pi/N_p) - 2\,r_{\text{outer},p} > 0$ 여부 판정
+- **판정 공차 및 해석적 주석**: 침범 정점에서 상대 치형 선분까지의 최단 거리(point-to-segment distance) 최대값이 다각형 현 오차 공차 $\text{tol} = \max(0.003\,m,\, 0.002)\text{ [mm]}$ 이하이면 `OK`, 초과하면 `Fail`(최대 침투 깊이 [mm] 및 최악 위상각 [deg] 포함)로 보고한다. 아울러 $A \ge D$(바닥 간섭) 및 사이클로이드 언더컷 한계($r_p < 2 r_{\text{roll}}$) 경고 주석도 함께 출력한다.
+
+#### (3) 최악 위상 확대 시각화 (`Tip Check` / 자동 팝업)
+
+- `Run` 또는 `Load` 시 `Fail`이 검출되면 메인 도면과 함께 **최악 위상 확대 간섭 검사 창**이 자동 팝업되며, 공차를 초과한 모든 간섭 지점이 **빨간 원(`o`)** 으로 표시된다.
+- 하단의 **`Tip Check`** 버튼을 누르면 `OK` 상태에서도 현재 선택된 모든 프로파일(`Involute` / `Cycloid` / `All`)의 확대 검사 창을 즉시 열어 각 물림쌍의 밀착·틈새를 직접 확인할 수 있다.
 
 ---
 
@@ -814,35 +1009,36 @@ A \leftrightarrow D,\quad C \leftrightarrow E
 > 여기서는 관련 단계들을 서브그래프 레인(열)으로 묶어 좌→우로 배열함으로써, 내보내기(export) 이미지가 정사각형에 가깝도록 구성했다.
 > 단계 순서는 각 노드의 ①②③… 번호로 추적한다.
 
-### 4.1 전체 프로그램 플로우 (`design.py` + `PGS.py` + `GPG.py`/`CPG.py`)
+### 4.1 전체 프로그램 플로우 (`design.py` + `PGS.py` + `GPG.py`/`CPG.py` + `interference.py`)
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 25, "rankSpacing": 45, "padding": 8}}}%%
 flowchart LR
     subgraph COL1["열Ⅰ. 준비 · 입력"]
         direction TB
-        S1["① 프로그램 시작 · 초기화<br/>객체 생성 · GUI 빌드<br/>기본값 · 초기 1회 계산"] --> S2(["② 입력 대기"])
-        S2 -->|"Run"| S3["③ read_parameters<br/>GUI 입력 → P1·gears 이관"]
+        S1["① 프로그램 시작 · 초기화<br/>스크롤 GUI 빌드 · 기본값 · 초기 1회 계산"] --> S2(["② 입력 대기"])
+        S2 -->|"Run / Tip Check"| S3["③ read_parameters<br/>GUI 입력(치수·손실 4종) → P1·gears 이관"]
     end
 
-    subgraph COL2["열Ⅱ. 치수 계산 · 검사"]
+    subgraph COL2["열Ⅱ. 치수 · 효율 · 기하 검사"]
         direction TB
-        S4{"④ Type ?"} -->|"Simple"| S5a["⑤ calc : 단순 레이아웃<br/>g3, g4 산출"]
-        S4 -->|"Wolfrom"| S5b["⑤ calc : 3K 치수 배치 해<br/>Zr1·Zr2 독립 입력 · 정수 확정<br/>Zp1·Zs2 도출 · g1, g2, g22"]
+        S4{"④ Type ?"} -->|"Simple"| S5a["⑤ calc : 단순 레이아웃<br/>g3, g4 · 속도 · 4대 손실 효율/역구동"]
+        S4 -->|"Wolfrom"| S5b["⑤ calc : 3K 치수 배치 해<br/>Zr1·Zr2 정수 확정 · Zp1·Zs2 도출<br/>g1, g2, g22 · 속도 · 4대 손실 효율/역구동"]
         S5a --> S6["⑥ output 출력<br/>checks_run · 6종 기하 검사"]
         S5b --> S6
     end
 
-    subgraph COL3["열Ⅲ. 치형 생성 · 출력"]
+    subgraph COL3["열Ⅲ. 치형 생성 · 1피치 간섭 검사 · 출력"]
         direction TB
-        S7["⑦ finalize_parameters<br/>링 전위계수 xr 자동 산출<br/>y0 = dc/2 · xs2 = −xp2"] --> S8{"⑧ 치형 프로파일"}
+        S7["⑦ finalize_parameters<br/>GPG: 링 전위 xr 자동 산출<br/>CPG: 단별 운용 모듈 mw 통일"] --> S8{"⑧ 치형 프로파일"}
         S8 -->|"Involute"| S9a["⑨ GPG.calc ×6<br/>인볼루트 점군"]
         S8 -->|"Cycloid"| S9b["⑨ CPG.calc ×6<br/>사이클로이드 점군"]
-        S8 -->|"All"| S9c["⑨ GPG.calc ×6 + CPG.calc ×6<br/>두 프로파일 점군 병행 생성"]
-        S9a --> S10["⑩ build_report → 프리뷰 전용<br/>Save → Result/ 하위<br/>README.md · Inputs.csv ·<br/>Involute_/Cycloid_/All_ PNG<br/>+ 기어별 Involute·Cycloid폴더"]
-        S9b --> S10
-        S9c --> S10
-        S10 --> S11(["⑪ 도면 표시 (All이면 겹쳐 표시)<br/>Exit 시 종료"])
+        S8 -->|"All"| S9c["⑨ GPG.calc + CPG.calc<br/>두 프로파일 병행 생성"]
+        S9a --> S9d["⑩ interference.check_profile_interference<br/>1피치 회전 스윕 이끝 간섭 · 유성 틈새 검사"]
+        S9b --> S9d
+        S9c --> S9d
+        S9d --> S10["⑪ build_report → 프리뷰/Tip Check<br/>Save → Result/ 하위<br/>README.md · model.csv · PNG(Fail 시 TipCheck_)<br/>+ 기어별 Involute·Cycloid 폴더"]
+        S10 --> S11(["⑫ 도면 표시 (Fail 시 확대 간섭창 자동 팝업)<br/>Exit 시 종료"])
     end
 
     COL1 --> COL2
@@ -949,7 +1145,7 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 
 ## 부록 A. 입력·출력 예시 (기본값: Wolfrom Zr1=90, Zr2=54)
 
-입력: `TYPE=3K-Wolfrom, m1=0.8, m2=1.2, Np=3, Zr1=90, Zr2=54, Zp2=20, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=Gp2.X=0.4, B=0.04, α=20°`
+입력: `TYPE=3K-Wolfrom, m1=0.8, m2=1.2, Np=3, Zr1=90, Zr2=54, Zp2=20, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=Gp2.X=0.4, B=0.04, α=20°, μ=0.08 (Grease), μb=0.002 (Ball/Needle), ζs=0.01 (Lip seal), kc=0.005 (Grease)`
 
 주요 결과 (`Result/README.md`):
 
@@ -962,16 +1158,22 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 | Speed A (Type-3K): Gs1 / Carrier / Gr1 / Planet / Gr2 | +1000 / +117.647 / +0 / -153.846 / +17.094 [rpm] |
 | Speed B (Ring2 고정): Gs1 / Carrier / Gr1 / Planet / Gr2 | +1000 / +102.302 / -17.391 / -173.913 / +0 [rpm] |
 | Speed C (캐리어 고정): Gs1 / Carrier / Gr1 / Planet / Gr2 | +1000 / +0 / -133.333 / -307.692 / -113.96 [rpm] |
+| Mesh Efficiency (Gs1–Gp1 / Gp1–Gr1 / Gp2–Gr2) | 98.42% / 99.73% / 99.50% (Contact Ratio = 1.36 / 1.59 / 1.52) |
+| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.50 m/s`) | Pin(M1/M2/M3) 0.08%/0.08%/0.11%, Shafts 0.21% · Seal 1.00%, Churning 0.50% |
+| **Efficiency A (Type-3K): 정구동 / 역구동** | **91.27% / 90.92%** (`Good`, `mu_lock = 1.5048` → **`Possible`**) |
+| Efficiency B (Ring2 고정): 정구동 / 역구동 | 96.26% / 96.26% (`Good` → `Possible`) |
+| Efficiency C (캐리어 고정): 정구동 / 역구동 | 96.03% / 96.03% (`Good` → `Possible`) |
 | Zs1 / Zp1 / Zr1 | 12 / 39 / −90 |
 | Zs2 / Zp2 / Zr2 | 15.0667 / 20 / −54 |
 | 캐리어 반경 | 21.04 mm |
 | 6종 기하 검사 (1단) | Equal Distance OK, 간섭류 전부 OK |
+| 운동학적 1피치 이끝 간섭 (`Involute`) | `Gs1-Gp1` / `Gp1-Gr1` / `Gp2-Gr2` 전부 `OK` (`pen = 0.0000 mm`), 유성 틈새 `+3.00 / +9.08 mm` |
 
 ---
 
-Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B=0.04, α=20°`):
+Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B=0.04, α=20°, μ=0.08, μb=0.002, ζs=0.01, kc=0.005`):
 
-입력: `TYPE=Simple, m1=0.5, Np=3, Zr1=36, Zs1=12, ns1=1000`
+입력: `TYPE=Simple, m1=0.5, Np=3, Zr1=36, Zs1=12, ns1=1000, mu=0.08, mu_b=0.002, zeta_s=0.01, kc=0.005`
 
 | 항목 | 값 |
 |------|-----|
@@ -981,6 +1183,10 @@ Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B
 | Ratio Total (Ring1 Output) `g4` | −3.0 |
 | Speed ① (Carrier Fixed, Ring1 Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +0 / −333.333 / −1000 [rpm] |
 | Speed ② (Ring1 Fixed, Carrier Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +250 / +0 / −500 [rpm] |
+| Mesh Efficiency (Gs1–Gp1 / Gp1–Gr1) | 97.83% / 99.26% (Contact Ratio = 1.20 / 1.25) |
+| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.31 m/s`) | Pin(M1/M2) 0.05%/0.05%, Shafts 0.21% · Seal 1.00%, Churning 0.50% |
+| Efficiency ① (Carrier Fixed): 정구동 / 역구동 (1·2·3단) | 95.29% / 92.12% / 89.10% (`Good` → `Possible`) |
+| Efficiency ② (Ring1 Fixed): 정구동 / 역구동 (1·2·3단) | 96.04% / 93.60% / 91.26% · 역 96.02% / 93.57% / 91.21% (`Good` → `Possible`) |
 
 > 저장되는 결과 파일은 위 Wolfrom 예시와 마찬가지로 `Result/README.md`, `Involute_*/Cycloid_*/All_*` PNG(Simple은 12개), `Result/Gs1|Gp1|Gr1/` 기어 폴더 구조를 갖는다.
 >
@@ -996,5 +1202,6 @@ Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B
   - **Save(저장)** 경로: 사이클로이드 점군 생성에 실패하면(`창성원이 너무 큽니다 (rp > r 여야 합니다)` 등) 콘솔에 `WARN: cycloid profile generation failed (...)`
     로그를 남기고 **해당 Cycloid/All 도면만 건너뛴다.** 인볼루트 도면·보고서·기어별 CSV/DXF/FGPG2 결과는 모두 정상 저장되며, 기어별 `Involute/`, `Cycloid/` 폴더의 FGPG2 산출물은 실패와 무관하게 두 프로파일 모두 생성된다.
   - **Run(프리뷰)** 경로: `Cycloid Teeth` 또는 `All`을 선택한 상태에서 CPG 점군 생성 단계의 오류는 예외로 이어져 콘솔에 출력된다. 이때는 `Involute Teeth`를 쓰거나, $Z_{s1}$, $N_p$, $Z_{r2}$ 등을 바꿔 $Z_{s2}$ 가 정수가 되도록 조정해야 한다.
-- 기하 검사 6종(§3.6)은 압력각 기반 인볼루트 기하로 계산되므로, 사이클로이드 치형을 선택한 경우에도 참고용으로만 사용된다.
+- 기하 검사 6종(§3.6)과 효율·역구동 판별(§3.8)은 인볼루트 치면 기하에 기반하므로, 사이클로이드 치형을 선택한 경우에는 참고용 추정치로 활용한다.
+- 효율 계산은 치면 물림($\mu$), 유성 핀·축 지지 베어링($\mu_b$), 실($\zeta_s$), 입력속도 $n_{s1}$ 연동 교반($k_c$)의 4대 손실을 정격 부하 비율 기반으로 추정한다. 부분 부하(경부하)에서는 무부하 기생 손실(실·교반)의 상대 비중이 커질 수 있으며, 역구동 판정이 `Marginal`($0\% < \eta_R < 20\%$)인 조합은 여유 마찰계수($\mu_{\text{lock}}$)와 실물 시험을 함께 검토해야 한다.
 - 기어비는 소수 6자리로 반올림되어 출력된다.
