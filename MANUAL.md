@@ -24,7 +24,8 @@ Based on the `PGS.py`, `GPG.py`, `CPG.py`, `interference.py`, and `design.py` so
 
 | File | Role |
 |------|------|
-| `design.py` | GUI entry point (Tkinter/ttk input interface, Run/Tip Check/Load/Save handlers, matplotlib drawing/preview, Markdown-rendered Result panel, report/PNG/per-gear CSV and FGPG2 output) |
+| `design.py` | GUI entry point (Tkinter/ttk input interface, progress/elapsed-time bar, Run/Animation/Tip Check/Load/Save handlers, non-blocking matplotlib preview, Markdown-rendered Result panel, report/PNG/per-gear CSV and FGPG2 output) |
+| `animation.py` | Interactive 2D gearbox animation popup — animates all planetary elements at exact calculated ratios with lockup-mode switching, stage filtering, playback controls, and live kinematics table |
 | `PGS.py` | Planetary gear sizing calculator (teeth layout solver, gear ratios, operating speeds, efficiency/backdrivability, geometric feasibility checks) |
 | `GPG.py` | Involute tooth profile generator (shared by external and internal gears) |
 | `CPG.py` | Cycloidal tooth profile generator (drop-in replacement sharing the `GPG` interface) |
@@ -156,9 +157,9 @@ Color scheme: Stage-1 gears use **light/medium tones** (Involute = `dimgray`, Cy
 
 > **Note — Saved drawing files**: Regardless of `Plot option`, saving always exports drawings for every applicable scope. See the output file list in §2.6.
 
-### 2.6 Step 5 — Run · Tip Check · Load · Save Buttons
+### 2.6 Step 5 — Run · Animation · Tip Check · Load · Save Buttons
 
-Pressing **Run** executes the full calculation, saves all generated files into the project's `result/` directory, renders the saved `result/README.md` (with linked images) in the Result panel, and displays the interactive preview:
+Pressing **Run** executes the calculation quickly, saves only `README.md` and its linked summary drawings (`Involute_Total.png` / `Cycloid_Total.png` for 3K-Wolfrom; `Involute_Stage1.png` / `Cycloid_Stage1.png` for Simple) into the project's `result/` directory, renders the saved `result/README.md` (with inline images) in the Result panel, and opens the interactive preview non-blocking (re-enabling all buttons immediately while displaying live step progress and elapsed time on the bottom-left progress bar):
 
 1. `read_parameters()` — Transfers GUI input values to the model objects
 2. `PGS.calc()` — Computes teeth layout, pitch diameters, ratios, operating speeds, and efficiency/backdrivability (§3.2–3.4, §3.8)
@@ -167,10 +168,12 @@ Pressing **Run** executes the full calculation, saves all generated files into t
 5. `finalize_parameters()` — Computes automatic ring profile shifts (`GPG`) or operating-module pitch radii (`CPG`) (§3.5, §3.7)
 6. Per-gear `GPG.calc()` / `CPG.calc()` — Generates tooth contour point clouds for 6 gears (or 3 for Simple) (§3.7)
 7. `interference.check_profile_interference()` — Performs the 1-pitch rolling-sweep tip interference check across `Gs1-Gp1`, `Gp1-Gr1`, `Gp2-Gr2` (Wolfrom) and planet-to-planet tip clearance check for the active profile(s)
-8. `_save_and_show_result("result/")` — Writes all outputs into `result/` and renders the saved `result/README.md` (with linked `Cycloid_*.png` and `Involute_*.png` images) in the Result panel
-9. `plot_pgs()` — Opens the interactive preview for the selected Plot option; if any kinematic tip interference check fails (`Fail`), automatically opens the zoomed worst-phase inspection window with interfering points marked in red
+8. `_save_and_show_run_result("result/")` — Writes `README.md` and the two linked summary PNGs (`Involute_*` / `Cycloid_*`) into `result/` and renders `result/README.md` in the Result panel
+9. `plot_pgs()` — Opens the interactive preview non-blocking for the selected Plot option; if any kinematic tip interference check fails (`Fail`), automatically opens the zoomed worst-phase inspection window with interfering points marked in red
 
-**Tip Check** runs the calculation and opens the zoomed worst-phase tip-interference inspection window immediately for all active profiles (`Involute`, `Cycloid`, or both for `All`), even when every check passes (`OK`). Both **Run** and **Save** also always export `TipCheck_Involute.png` and `TipCheck_Cycloid.png` regardless of pass/fail status.
+**Animation** (immediately right of **Run**) opens an interactive 2D animation popup (`animation.py`) that animates every gearbox element (`Gs1`, `Gp1`, `Gr1`, `Carrier`, plus `Gp2`/`Gr2` for 3K-Wolfrom) at its exact calculated speed ratio, with lockup-mode switching, stage filtering, playback controls (`Space`, `R`, `←`/`→`), speed slider, overlays, zoom/pan toolbar, and a live ratio/speed/angle table.
+
+**Tip Check** runs the calculation and opens the zoomed worst-phase tip-interference inspection window immediately for all active profiles (`Involute`, `Cycloid`, or both for `All`), even when every check passes (`OK`). **Save** also always exports `TipCheck_Involute.png` and `TipCheck_Cycloid.png` regardless of pass/fail status.
 
 **Load** opens a file picker for a saved `README.md` (e.g. `Result/README.md`), reads its `## Input Parameters` section to refill every input widget, and then runs the exact same workflow as **Run** so a previously saved design can be reopened and iterated on immediately.
 

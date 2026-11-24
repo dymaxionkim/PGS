@@ -26,7 +26,8 @@ _PGS (Planetary Gear Set Sizing Tool) — Simple & Wolfrom 유성기어장치 �
 
 | 파일 | 역할 |
 |------|------|
-| `design.py` | GUI 진입점 (Tkinter/ttk 입력 화면, Run·Save 이벤트 처리, matplotlib 도면·프리뷰 출력, 보고서·PNG·기어별 CSV 및 FGPG2 결과 저장) |
+| `design.py` | GUI 진입점 (Tkinter/ttk 입력 화면, 진행률·소요시간 바, Run·Animation·Tip Check·Load·Save 이벤트 처리, 비차단 matplotlib 도면·프리뷰 출력, Markdown 렌더링, 보고서·PNG·기어별 CSV 및 FGPG2 결과 저장) |
+| `animation.py` | 인터랙티브 2D 유성기어박스 애니메이션 팝업 — 계산된 정확한 속도비로 모든 기어 요소를 애니메이션하며 구속 모드·스테이지 전환, 재생 제어, 실시간 기구학 테이블 제공 |
 | `PGS.py` | 유성기어장치 치수 계산기 (치수 배치 해, 기어비, 기하학적 제약 검사) |
 | `GPG.py` | 인볼루트 치형 프로파일 생성기 (외/내접 기어 공용) |
 | `CPG.py` | 사이클로이드 치형 프로파일 생성기 (`GPG`와 동일 인터페이스의 교체용 모듈) |
@@ -156,9 +157,9 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 
 > **참고 — 저장 시 산출 파일명**: `Plot option`과 무관하게 **전체 대상에 대해 도면을 모두 저장**한다. 파일명 규칙은 §2.6 Save 단계의 [결과 파일] 목록 참조.
 
-### 2.6 Step 5 — Run · Tip Check · Load · Save 버튼 (계산 · 간섭 확인 · 재사용 · 파일 저장)
+### 2.6 Step 5 — Run · Animation · Tip Check · Load · Save 버튼 (계산 · 애니메이션 · 간섭 확인 · 재사용 · 파일 저장)
 
-**Run**을 누르면 계산·프리뷰만 수행되고 **파일은 저장되지 않는다**:
+**Run**을 누르면 빠른 실행을 위해 `result/` 디렉토리에 `README.md`와 링크된 요약 도면 2종(`Involute_Total.png`·`Cycloid_Total.png`, Simple은 `Involute_Stage1.png`·`Cycloid_Stage1.png`)만 저장하고 Result 패널에 렌더링하며, 비차단(non-blocking) 방식으로 인터랙티브 프리뷰를 연다(완료 즉시 버튼이 재활성화되며, 하단 좌측 진행률 바에 단계별 진행 상황과 소요시간이 실시간 표시된다):
 
 1. `read_parameters()` — GUI 입력값을 모델 객체로 이관
 2. `PGS.calc()` — 치수 배치 해·직경·기어비 계산 (§3.2~3.3)
@@ -167,10 +168,12 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 5. `finalize_parameters()` — 링기어 전위계수 자동 산출 등 최종 파라미터 확정 (§3.5)
 6. 각 기어별 `GPG.calc()` — 6개 기어(또는 Simple은 3개)의 치형 점군 생성 (§3.7)
 7. `interference.check_profile_interference()` — 선택된 프로파일(`Involute` / `Cycloid` / `All` 양쪽 모두)에 대해 `Gs1-Gp1`, `Gp1-Gr1`, `Gp2-Gr2`(Wolfrom) 1피치 회전 스윕 이끝 간섭 검사 및 유성기어 상호 이끝 틈새 검사 수행
-8. `build_report()` — Markdown 보고서를 Result 패널에 표시 (`## Check Geometrical Conditions`에 운동학적 이끝 간섭 결과 포함)
-9. `plot_pgs()` — 선택한 Plot option에 따라 인터랙티브 프리뷰 표시. 운동학적 이끝 간섭에서 `Fail`이 검출되면 최악 위상 확대 검사 창을 자동으로 함께 띄워 간섭 지점을 빨간 점으로 강조 표시
+8. `_save_and_show_run_result("result/")` — `result/`에 `README.md`와 요약 도면 2종(`Involute_*`·`Cycloid_*`)을 저장하고 Result 패널에 Markdown으로 렌더링
+9. `plot_pgs()` — 선택한 Plot option에 따라 비차단 방식으로 인터랙티브 프리뷰 표시. 운동학적 이끝 간섭에서 `Fail`이 검출되면 최악 위상 확대 검사 창을 자동으로 함께 띄워 간섭 지점을 빨간 점으로 강조 표시
 
-**Tip Check** 버튼을 누르면 계산을 실행하고, 간섭 통과(`OK`) 여부와 관계없이 현재 선택된 모든 프로파일(`Involute`, `Cycloid`, 또는 `All`)의 **최악 위상 확대 이끝 간섭 검사 창**을 즉시 열어 각 물림쌍의 밀착·틈새 상태를 시각적으로 확인할 수 있다. **Run** / **Save** 시에도 통과 여부와 관계없이 `TipCheck_Involute.png` / `TipCheck_Cycloid.png`가 함께 저장된다.
+**Animation** 버튼(**Run** 바로 오른쪽)을 누르면 새로운 팝업 창(`animation.py`)이 열리며, 계산된 정확한 속도비에 따라 기어박스 요소 전체(`Gs1`, `Gp1`, `Gr1`, `Carrier`, 3K-Wolfrom의 `Gp2`·`Gr2`)가 실시간으로 애니메이션된다. 구속 모드 전환, 스테이지 필터(`Total` / `Stage1` / `Stage2`), 재생/일시정지(`Space`), 초기화(`R`), `±5°` 스텝(`←`/`→`), 방향·속도 조절, 피치원·캐리어/마커 토글, 줌/팬 툴바 및 실시간 속도비·RPM·회전각 테이블을 제공한다.
+
+**Tip Check** 버튼을 누르면 계산을 실행하고, 간섭 통과(`OK`) 여부와 관계없이 현재 선택된 모든 프로파일(`Involute`, `Cycloid`, 또는 `All`)의 **최악 위상 확대 이끝 간섭 검사 창**을 즉시 열어 각 물림쌍의 밀착·틈새 상태를 시각적으로 확인할 수 있다. **Save** 시에는 통과 여부와 관계없이 `TipCheck_Involute.png` / `TipCheck_Cycloid.png`도 함께 저장된다.
 
 **Load**를 누르면 **파일 선택 대화상자**가 열리고, 원하는 경로의 **`README.md`** 파일(`Result/README.md` 등)을 고르면 그 파일의 `## Input Parameters` 섹션을 읽어 **UI의 파라미터 입력창을 자동으로 다시 채운다**. 이어서 Run과 동일하게 `read_parameters → run_calc → build_report → plot_pgs`를 수행하므로, 이전에 Save로 저장한 설계를 즉시 불러와 같은 값을 확인·이어서 수정할 수 있다.
 

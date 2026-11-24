@@ -15,6 +15,7 @@ import math
 import os
 import re
 import sys
+import time
 import tkinter as tk
 import tkinter.font as font
 import webbrowser
@@ -33,6 +34,7 @@ except ImportError:  # pragma: no cover - pillow is optional for inline images
     ImageTk = None
 
 import FGPG2_CLI
+import animation
 import interference
 from CPG import CPG
 from GPG import GPG
@@ -242,7 +244,14 @@ gears: dict[str, GPG | CPG]
 gears_second: dict[str, GPG | CPG] | None = None
 interference_reports: list[interference.ProfileInterferenceReport] = []
 run_button: ttk.Button | None = None
+animation_button: ttk.Button | None = None
 save_button: ttk.Button | None = None
+load_button: ttk.Button | None = None
+tip_check_button: ttk.Button | None = None
+status_progressbar: ttk.Progressbar | None = None
+status_label: ttk.Label | None = None
+_is_busy: bool = False
+_animation_window: animation.GearboxAnimationWindow | None = None
 result_copy_button: ttk.Button | None = None
 result_search_var: tk.StringVar | None = None
 result_search_entry: ttk.Entry | None = None
@@ -431,7 +440,136 @@ def _active_profile_sets() -> list[tuple[str, dict[str, GPG | CPG]]]:
     return active
 
 
-def run_calc() -> None:
+def _calc_gears_only() -> None:
+    """Compute PGS ratios and gear tooth profiles without tip-sweep or disk I/O."""
+    P1.calc()
+    finalize_parameters(gears)
+    if gears_second is not None:
+        finalize_parameters(gears_second)
+    for name in GEAR_ORDER[:3]:
+        gears[name].calc()
+    if P1.is_wolfrom:
+        for name in GEAR_ORDER[3:]:
+            gears[name].calc()
+    if gears_second is not None:
+        for name in GEAR_ORDER[:3]:
+            gears_second[name].calc()
+        if P1.is_wolfrom:
+            for name in GEAR_ORDER[3:]:
+                gears_second[name].calc()
+
+
+def _set_progress(
+    percent: float,
+    text: str,
+    *,
+    color: str = MUTED,
+    pump_ui: bool = True,
+) -> None:
+    """Update the bottom-bar progress bar and elapsed-time status label."""
+    if status_progressbar is not None:
+        try:
+            if status_progressbar.winfo_exists():
+                status_progressbar["value"] = max(0.0, min(100.0, percent))
+        except tk.TclError:
+            pass
+    if status_label is not None:
+        try:
+            if status_label.winfo_exists():
+                status_label.configure(text=text, foreground=color)
+        except tk.TclError:
+            pass
+    if pump_ui and "app" in globals() and app is not None:
+        try:
+            if app.winfo_exists():
+                app.update()
+        except tk.TclError:
+            pass
+
+
+class _ProgressTracker:
+    """Tracks step progress and elapsed time for long-running GUI actions."""
+
+    def __init__(self, total_steps: int, *, pump_ui: bool = True) -> None:
+        self.total = max(1, int(total_steps))
+        self.done = 0
+        self.t0 = time.perf_counter()
+        self.pump_ui = pump_ui
+
+    @property
+    def elapsed(self) -> float:
+        return time.perf_counter() - self.t0
+
+    def update(self, message: str, *, advance: int = 0) -> None:
+        if advance:
+            self.done = min(self.total, self.done + advance)
+        pct = min(100.0, (self.done / self.total) * 100.0)
+        _set_progress(
+            pct,
+            f"{message} ({self.done}/{self.total} · {self.elapsed:.1f}s)",
+            pump_ui=self.pump_ui,
+        )
+
+    def finish(self, message: str = "Done") -> None:
+        self.done = self.total
+        _set_progress(
+            100.0,
+            f"{message} ({self.elapsed:.1f}s)",
+            color="#15803d",
+            pump_ui=self.pump_ui,
+        )
+
+    def fail(self, message: str = "Error") -> None:
+        _set_progress(
+            0.0,
+            f"{message} ({self.elapsed:.1f}s)",
+            color=DANGER,
+            pump_ui=self.pump_ui,
+        )
+
+
+def _estimate_run_steps() -> int:
+    """Return total discrete progress steps for lightweight Run."""
+    # calc(1) + tip_check(1) + README.md(1) + Involute PNG(1)
+    # + Cycloid PNG(1) + render(1) + plot(1)
+    return 7
+
+
+def _estimate_export_steps(*, include_plot: bool = False) -> int:
+    """Return total discrete progress steps for Run / Save."""
+    n_gears = 5 if P1.is_wolfrom else 3
+    n_scopes = 8 if P1.is_wolfrom else 4
+    n_all = 1 + n_gears
+    # calc(1) + tip_check(1) + report_csv(1) + fgpg2(2*n_gears)
+    # + involute_png(n_scopes) + cycloid_png(n_scopes) + all_png(n_all)
+    # + tipcheck_png(2) + render(1) [+ plot(1)]
+    return 3 + (n_gears * 2) + (n_scopes * 2) + n_all + 2 + 1 + (1 if include_plot else 0)
+
+
+def _set_action_buttons_state(state: str) -> None:
+    """Enable or disable main action buttons during long-running operations."""
+    for btn in (
+        run_button,
+        save_button,
+        load_button,
+        tip_check_button,
+        animation_button,
+    ):
+        if btn is not None:
+            try:
+                if btn.winfo_exists():
+                    btn.configure(state=state)
+            except tk.TclError:
+                pass
+    if "app" in globals() and app is not None:
+        try:
+            if app.winfo_exists():
+                app.update_idletasks()
+        except tk.TclError:
+            pass
+
+
+def run_calc(*, progress: _ProgressTracker | None = None) -> None:
     """Run PGS sizing, every gear's profile generation and kinematic tip checks."""
     global interference_reports
     P1.calc()
@@ -451,12 +589,16 @@ def run_calc() -> None:
         if P1.is_wolfrom:
             for name in GEAR_ORDER[3:]:
                 gears_second[name].calc()
+    if progress is not None:
+        progress.update("Checking kinematic tip interference...", advance=1)
 
     interference_reports = [
         interference.check_profile_interference(P1, g_set, pname)
         for pname, g_set in _active_profile_sets()
     ]
     interference.print_interference_summary(interference_reports)
+    if progress is not None:
+        progress.update("Writing report & model files...", advance=1)
 
 
 # --------------------------------------------------------------- helpers
@@ -546,6 +688,21 @@ def _profile_set(cls: type) -> dict[str, GPG | CPG]:
     return s
 
 
+def _show_figures_nonblocking() -> None:
+    """Show open matplotlib figures without blocking the Tkinter event loop."""
+    plt.show(block=False)
+    for num in plt.get_fignums():
+        fig = plt.figure(num)
+        fig.canvas.draw_idle()
+        manager = getattr(fig.canvas, "manager", None)
+        win = getattr(manager, "window", None)
+        if win is not None and hasattr(win, "lift"):
+            try:
+                win.lift()
+            except tk.TclError:
+                pass
+
+
 def _draw(keys: list[str], sets: list[tuple[dict, bool]],
           out_path: str | None, *, show: bool = True) -> None:
     """Draw ``keys`` from each ``(gear set, is_cycloid)`` pair on one figure.
@@ -583,7 +740,7 @@ def _draw(keys: list[str], sets: list[tuple[dict, bool]],
         plt.savefig(out_path, dpi=PLOT_DPI)
         plt.close(plt.gcf())
     elif show:
-        plt.show()
+        _show_figures_nonblocking()
 
 
 def _profile_variant_sets() -> tuple[dict, dict | None]:
@@ -611,7 +768,52 @@ def _profile_variant_sets() -> tuple[dict, dict | None]:
     return involute, cycloid
 
 
-def save_pngs(out_dir: str) -> None:
+def save_summary_pngs(
+    out_dir: str,
+    *,
+    progress: _ProgressTracker | None = None,
+) -> None:
+    """Save only the summary PNGs linked from ``README.md`` into ``out_dir``.
+
+    Saves ``Involute_Total.png`` and ``Cycloid_Total.png`` for 3K-Wolfrom
+    (or ``Involute_Stage1.png`` and ``Cycloid_Stage1.png`` for Simple).
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    involute, cycloid = _profile_variant_sets()
+    scope, code = ("Total", 3) if P1.is_wolfrom else ("Stage1", 1)
+
+    if progress is not None:
+        progress.update(f"Saving Involute_{scope}.png...")
+    _draw(
+        _PLOT_CODE_KEYS[code],
+        [(involute, False)],
+        os.path.join(out_dir, f"Involute_{scope}.png"),
+    )
+    if progress is not None:
+        progress.update(f"Saved Involute_{scope}.png", advance=1)
+
+    cyc_path = os.path.join(out_dir, f"Cycloid_{scope}.png")
+    if cycloid is not None:
+        if progress is not None:
+            progress.update(f"Saving Cycloid_{scope}.png...")
+        _draw(_PLOT_CODE_KEYS[code], [(cycloid, True)], cyc_path)
+        if progress is not None:
+            progress.update(f"Saved Cycloid_{scope}.png", advance=1)
+    else:
+        if os.path.isfile(cyc_path):
+            try:
+                os.remove(cyc_path)
+            except OSError:
+                pass
+        if progress is not None:
+            progress.update(f"Skipped Cycloid_{scope}.png", advance=1)
+
+
+def save_pngs(
+    out_dir: str,
+    *,
+    progress: _ProgressTracker | None = None,
+) -> None:
     """Render and save every required PNG into ``out_dir``.
 
     3K-Wolfrom saves ``Involute_*``/``Cycloid_*``/``All_*`` for the Total,
@@ -627,19 +829,31 @@ def save_pngs(out_dir: str) -> None:
         scopes = [("Stage1", 1), ("Gs1", 11), ("Gp1", 12), ("Gr1", 13)]
 
     for scope, code in scopes:
+        if progress is not None:
+            progress.update(f"Saving Involute_{scope}.png...")
         _draw(_PLOT_CODE_KEYS[code], [(involute, False)],
               os.path.join(out_dir, f"Involute_{scope}.png"))
+        if progress is not None:
+            progress.update(f"Saved Involute_{scope}.png", advance=1)
     if cycloid is not None:
         for scope, code in scopes:
+            if progress is not None:
+                progress.update(f"Saving Cycloid_{scope}.png...")
             _draw(_PLOT_CODE_KEYS[code], [(cycloid, True)],
                   os.path.join(out_dir, f"Cycloid_{scope}.png"))
+            if progress is not None:
+                progress.update(f"Saved Cycloid_{scope}.png", advance=1)
         # The combined overlay image is produced for the whole set
         # (All_Total for Wolfrom, All_Stage1 for Simple) and for each gear.
         whole = [("Total", 3)] if P1.is_wolfrom else [("Stage1", 1)]
         gear_scopes = [(s, c) for s, c in scopes if c >= 11]
         for scope, code in whole + gear_scopes:
+            if progress is not None:
+                progress.update(f"Saving All_{scope}.png...")
             _draw(_PLOT_CODE_KEYS[code], [(involute, False), (cycloid, True)],
                   os.path.join(out_dir, f"All_{scope}.png"))
+            if progress is not None:
+                progress.update(f"Saved All_{scope}.png", advance=1)
     else:
         for stale in (
             "All_Total.png",
@@ -657,17 +871,25 @@ def save_pngs(out_dir: str) -> None:
 
     # Always save zoomed worst-phase tip-interference inspection plots for
     # Involute (and Cycloid when available), regardless of pass/fail status.
+    if progress is not None:
+        progress.update("Saving TipCheck_Involute.png...")
     inv_rep = interference.check_profile_interference(P1, involute, "Involute")
     interference.plot_interference_report(
         P1, involute, inv_rep,
         out_path=os.path.join(out_dir, "TipCheck_Involute.png"),
     )
+    if progress is not None:
+        progress.update("Saved TipCheck_Involute.png", advance=1)
     if cycloid is not None:
+        if progress is not None:
+            progress.update("Saving TipCheck_Cycloid.png...")
         cyc_rep = interference.check_profile_interference(P1, cycloid, "Cycloid")
         interference.plot_interference_report(
             P1, cycloid, cyc_rep,
             out_path=os.path.join(out_dir, "TipCheck_Cycloid.png"),
         )
+        if progress is not None:
+            progress.update("Saved TipCheck_Cycloid.png", advance=1)
 
 
 def plot_tip_check(*, only_if_fail: bool = False, show: bool = True) -> None:
@@ -683,7 +905,7 @@ def plot_tip_check(*, only_if_fail: bool = False, show: bool = True) -> None:
         interference.plot_interference_report(P1, g_set, rep, show=False)
         opened = True
     if opened and show:
-        plt.show()
+        _show_figures_nonblocking()
 
 
 def plot_pgs() -> None:
@@ -700,7 +922,7 @@ def plot_pgs() -> None:
         sets.append((gears_second, isinstance(gears_second.get("Gp1"), CPG)))
     _draw(keys, sets, None, show=False)
     plot_tip_check(only_if_fail=True, show=False)
-    plt.show()
+    _show_figures_nonblocking()
 
 
 # ----------------------------------------------------------- report builder
@@ -898,12 +1120,9 @@ def build_report(base_dir: str | None = None) -> None:
         _update_result_search(jump_first=True)
 
 
-def _save_and_show_result(out_dir: str) -> None:
-    """Save all outputs into ``out_dir`` and render its saved README.md."""
+def _render_saved_readme(out_dir: str) -> None:
+    """Read ``out_dir/README.md`` and render it into the Result textbox."""
     global report_markdown
-    report_markdown = _compose_report_markdown()
-    save_output(out_dir)
-    save_pngs(out_dir)
     readme_path = os.path.join(out_dir, "README.md")
     with open(readme_path, encoding="utf-8") as f:
         saved_md = f.read()
@@ -915,6 +1134,44 @@ def _save_and_show_result(out_dir: str) -> None:
         textbox.insert("0.0", saved_md)
     if result_search_var is not None:
         _update_result_search(jump_first=True)
+
+
+def _save_and_show_run_result(
+    out_dir: str,
+    *,
+    progress: _ProgressTracker | None = None,
+) -> None:
+    """Save only README.md and its linked summary PNGs into ``out_dir`` and render."""
+    global report_markdown
+    os.makedirs(out_dir, exist_ok=True)
+    report_markdown = _compose_report_markdown()
+    with open(os.path.join(out_dir, "README.md"), "w", encoding="utf-8") as f:
+        f.write(report_markdown)
+    if progress is not None:
+        progress.update("Saved README.md", advance=1)
+    save_summary_pngs(out_dir, progress=progress)
+    if progress is not None:
+        progress.update("Rendering report...")
+    _render_saved_readme(out_dir)
+    if progress is not None:
+        progress.update("Report rendered", advance=1)
+
+
+def _save_and_show_result(
+    out_dir: str,
+    *,
+    progress: _ProgressTracker | None = None,
+) -> None:
+    """Save all outputs into ``out_dir`` and render its saved README.md."""
+    global report_markdown
+    report_markdown = _compose_report_markdown()
+    save_output(out_dir, progress=progress)
+    save_pngs(out_dir, progress=progress)
+    if progress is not None:
+        progress.update("Rendering report...")
+    _render_saved_readme(out_dir)
+    if progress is not None:
+        progress.update("Report rendered", advance=1)
 
 
 # --------------------------------------------------------------- file output
@@ -956,13 +1213,19 @@ def _generate_fgpg2_results(folder: str, profile: str = "involute") -> None:
     FGPG2_CLI.generate(p, folder)
 
 
-def save_output(out_dir: str) -> None:
+def save_output(
+    out_dir: str,
+    *,
+    progress: _ProgressTracker | None = None,
+) -> None:
     """Write the Markdown report, model CSV and per-gear results."""
     os.makedirs(out_dir, exist_ok=True)
     md_content = report_markdown if report_markdown else textbox.get("0.0", "end")
     with open(out_dir + "/README.md", "w", encoding="utf-8") as f:
         f.write(md_content)
     _write_input_model_csv(out_dir + "/model.csv")
+    if progress is not None:
+        progress.update("Saved README.md & model.csv", advance=1)
     # Gear folders: the Stage-1 gears always, Stage-2 Gp2/Gr2 for the Wolfrom
     # type only.  Gs2 is never exported.
     names = GEAR_ORDER[:3] + GEAR_ORDER[4:] if P1.is_wolfrom else GEAR_ORDER[:3]
@@ -973,10 +1236,16 @@ def save_output(out_dir: str) -> None:
         # Per-profile result subfolders: Involute/ and Cycloid/ carry FGPG2's
         # Result.csv/.dxf/Result1.png/Result2.png for the matching profile.
         for profile in ("involute", "cycloid"):
+            if progress is not None:
+                progress.update(f"Generating {name} ({profile.capitalize()})...")
             sub = folder + "/" + profile.capitalize()
             os.makedirs(sub, exist_ok=True)
             _write_gear_csv(sub + "/Inputs.csv", name)
             _generate_fgpg2_results(sub, profile)
+            if progress is not None:
+                progress.update(
+                    f"Generated {name} ({profile.capitalize()})", advance=1
+                )
 
 
 def _write_gear_csv(path: str, name: str) -> None:
@@ -1271,6 +1540,8 @@ def button_load_callback() -> None:
     "## Input Parameters" section and refills the input widgets, then
     runs the calculation exactly like the Run button.
     """
+    if _is_busy:
+        return
     path = filedialog.askopenfilename(
         title="Select the README.md result file to load parameters from",
         filetypes=[("README.md", "README.md"),
@@ -1289,24 +1560,71 @@ def button_load_callback() -> None:
 
 
 def button_run_callback() -> None:
-    """Compute, save all result files to ``result/``, render README.md and plot."""
-    if run_button is not None:
-        run_button.configure(state="disabled")
-        app.update_idletasks()
+    """Compute, save README.md & summary PNGs to ``result/``, render and plot."""
+    global _is_busy
+    if _is_busy:
+        return
+    _is_busy = True
+    _set_action_buttons_state("disabled")
+    progress = _ProgressTracker(1)
+    try:
+        progress.update("Reading parameters...")
+        read_parameters()
+        progress.total = _estimate_run_steps()
+        progress.update("Calculating gear geometry...")
+        run_calc(progress=progress)
+        _save_and_show_run_result(DEFAULT_RESULT_DIR, progress=progress)
+        print("Result summary saved in " + DEFAULT_RESULT_DIR)
+        progress.update("Opening plot window...")
+        plot_pgs()
+        _set_action_buttons_state("normal")
+        progress.finish("Done")
+    except Exception as exc:
+        _set_action_buttons_state("normal")
+        progress.fail("Error")
+        messagebox.showerror("Run Error", str(exc))
+    finally:
+        _is_busy = False
+        _set_action_buttons_state("normal")
+
+
+def button_animation_callback() -> None:
+    """Open a popup window animating all gearbox elements at calculated ratios."""
+    global _animation_window
+    if _is_busy:
+        return
     try:
         read_parameters()
-        run_calc()
-        _save_and_show_result(DEFAULT_RESULT_DIR)
-        print("Result files saved in " + DEFAULT_RESULT_DIR)
-        plot_pgs()
-    finally:
-        if run_button is not None:
-            run_button.configure(state="normal")
-            app.update_idletasks()
+        _calc_gears_only()
+        plot_opt = entries["PlotOption"].get()
+        initial_view = (
+            plot_opt if plot_opt in ("Total", "Stage1", "Stage2") else None
+        )
+        if _animation_window is not None and _animation_window.is_alive():
+            _animation_window.close()
+
+        def _clear_ref() -> None:
+            global _animation_window
+            _animation_window = None
+
+        _animation_window = animation.open_animation_window(
+            app,
+            P1,
+            _active_profile_sets(),
+            initial_view=initial_view,
+            on_close=_clear_ref,
+        )
+    except Exception as exc:
+        messagebox.showerror(
+            "Animation Error",
+            f"Could not start animation:\n{exc}",
+        )
 
 
 def button_tip_check_callback() -> None:
     """Run kinematic tip-interference check and open zoomed inspection plots."""
+    if _is_busy:
+        return
     read_parameters()
     run_calc()
     build_report()
@@ -1321,28 +1639,41 @@ def button_save_callback() -> None:
     writes the report, per-gear CSV/DXF/PNG files and the plot PNGs.  Also
     (re)runs the calculation so the saved files always match the inputs.
     """
-    global save_button
-    if save_button is not None:
-        save_button.configure(state="disabled")
-        app.update_idletasks()
+    global _is_busy
+    if _is_busy:
+        return
+    folder = filedialog.askdirectory(
+        title="Select the folder where the Result directory will be created")
+    if not folder:
+        return
+    _is_busy = True
+    _set_action_buttons_state("disabled")
+    progress = _ProgressTracker(1)
     try:
-        folder = filedialog.askdirectory(
-            title="Select the folder where the Result directory will be created")
-        if not folder:
-            return
         out_dir = os.path.join(folder, "Result")
+        progress.update("Reading parameters...")
         read_parameters()
-        run_calc()
-        _save_and_show_result(out_dir)
+        progress.total = _estimate_export_steps(include_plot=False)
+        progress.update("Calculating gear geometry...")
+        run_calc(progress=progress)
+        _save_and_show_result(out_dir, progress=progress)
         print("Result files saved in " + out_dir)
+        _set_action_buttons_state("normal")
+        progress.finish("Saved")
+    except Exception as exc:
+        _set_action_buttons_state("normal")
+        progress.fail("Error")
+        messagebox.showerror("Save Error", str(exc))
     finally:
-        if save_button is not None:
-            save_button.configure(state="normal")
-            app.update_idletasks()
+        _is_busy = False
+        _set_action_buttons_state("normal")
 
 
 def button_exit_callback() -> None:
     print("button_exit pressed")
+    if _animation_window is not None and _animation_window.is_alive():
+        _animation_window.close()
+    plt.close("all")
     exit()
 
 
@@ -1401,22 +1732,33 @@ def _configure_style(style: ttk.Style, title_font, section_font) -> None:
     style.configure("TButton", background=NEUTRAL, foreground=FG, borderwidth=0,
                     focusthickness=0, padding=(10, 4))
     style.map("TButton",
-              background=[("active", NEUTRAL_DARK), ("pressed", NEUTRAL_DARK)])
+              background=[("disabled", "#f3f4f6"), ("active", NEUTRAL_DARK),
+                          ("pressed", NEUTRAL_DARK)],
+              foreground=[("disabled", "#9ca3af")])
 
     style.configure("Small.TButton", background=NEUTRAL, foreground=FG,
                     borderwidth=0, focusthickness=0, padding=(5, 2))
     style.map("Small.TButton",
-              background=[("active", NEUTRAL_DARK), ("pressed", NEUTRAL_DARK)])
+              background=[("disabled", "#f3f4f6"), ("active", NEUTRAL_DARK),
+                          ("pressed", NEUTRAL_DARK)],
+              foreground=[("disabled", "#9ca3af")])
 
     style.configure("Accent.TButton", background=ACCENT, foreground="white",
                     borderwidth=0, focusthickness=0, padding=(14, 4))
     style.map("Accent.TButton",
-              background=[("active", ACCENT_DARK), ("pressed", ACCENT_DARK)])
+              background=[("disabled", "#93c5fd"), ("active", ACCENT_DARK),
+                          ("pressed", ACCENT_DARK)],
+              foreground=[("disabled", "#eff6ff")])
 
     style.configure("Danger.TButton", background=DANGER, foreground="white",
                     borderwidth=0, focusthickness=0, padding=(10, 4))
     style.map("Danger.TButton",
               background=[("active", DANGER_DARK), ("pressed", DANGER_DARK)])
+
+    style.configure("Accent.Horizontal.TProgressbar",
+                    background=ACCENT, troughcolor=NEUTRAL,
+                    bordercolor=BORDER, lightcolor=ACCENT, darkcolor=ACCENT,
+                    thickness=12)
 
     style.configure("TScrollbar", background=CARD, troughcolor=BG,
                     bordercolor=BG, arrowcolor=MUTED, relief="flat")
@@ -2114,7 +2456,8 @@ def _build_result_panel(parent) -> None:
 
 def build_gui() -> None:
     """Create the themed application window and lay out the widgets."""
-    global app, run_button, save_button
+    global app, run_button, animation_button, save_button, load_button
+    global tip_check_button, status_progressbar, status_label
     app = tk.Tk()
     app.title("PGS — Planetary Gear Sizing")
     app.configure(background=BG)
@@ -2226,7 +2569,7 @@ def build_gui() -> None:
     right.columnconfigure(0, weight=1)
     _build_result_panel(right)
 
-    # --- bottom bar : actions -------------------------------------------
+    # --- bottom bar : actions & progress status -------------------------
     bar = ttk.Frame(main, style="App.TFrame")
     bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(PAD, 0))
     ttk.Button(bar, text="Exit", style="Danger.TButton",
@@ -2234,13 +2577,38 @@ def build_gui() -> None:
     save_button = ttk.Button(bar, text="Save", style="Accent.TButton",
                              command=button_save_callback)
     save_button.pack(side="right", padx=(0, PAD))
+    animation_button = ttk.Button(bar, text="Animation", style="TButton",
+                                  command=button_animation_callback)
+    animation_button.pack(side="right", padx=(0, PAD))
     run_button = ttk.Button(bar, text="Run", style="Accent.TButton",
                             command=button_run_callback)
     run_button.pack(side="right", padx=(0, PAD))
-    ttk.Button(bar, text="Tip Check", style="TButton",
-               command=button_tip_check_callback).pack(side="right", padx=(0, PAD))
-    ttk.Button(bar, text="Load", style="Accent.TButton",
-               command=button_load_callback).pack(side="right", padx=(0, PAD))
+    tip_check_button = ttk.Button(bar, text="Tip Check", style="TButton",
+                                  command=button_tip_check_callback)
+    tip_check_button.pack(side="right", padx=(0, PAD))
+    load_button = ttk.Button(bar, text="Load", style="Accent.TButton",
+                             command=button_load_callback)
+    load_button.pack(side="right", padx=(0, PAD))
+
+    status_frame = ttk.Frame(bar, style="App.TFrame")
+    status_frame.pack(side="left", fill="x", expand=True, padx=(0, PAD))
+    status_progressbar = ttk.Progressbar(
+        status_frame,
+        orient="horizontal",
+        mode="determinate",
+        maximum=100,
+        value=0,
+        length=140,
+        style="Accent.Horizontal.TProgressbar",
+    )
+    status_progressbar.pack(side="left", padx=(0, 8))
+    status_label = ttk.Label(
+        status_frame,
+        text="Ready",
+        style="CardMuted.TLabel",
+        anchor="w",
+    )
+    status_label.pack(side="left", fill="x", expand=True)
 
     # Size the window to ~70% of the full stacked height so it fits comfortably
     # on screen while the left scrollbar keeps every input reachable.
@@ -2282,7 +2650,7 @@ def main(argv: list[str] | None = None) -> None:
     read_parameters()
     run_calc()
     if loaded:
-        _save_and_show_result(DEFAULT_RESULT_DIR)
+        _save_and_show_run_result(DEFAULT_RESULT_DIR)
         plot_pgs()
     app.mainloop()
 

@@ -898,25 +898,21 @@ def build_gui() -> None:
     app.columnconfigure(0, weight=1)
     app.rowconfigure(0, weight=1)
     main.columnconfigure(1, weight=1)
-    main.rowconfigure(2, weight=1)
-
-    ttk.Label(main, text="Search feasible Wolfrom (3K) gear combinations",
-              style="Muted.TLabel").grid(
-        row=1, column=0, columnspan=2, sticky="w", pady=(0, PAD))
+    main.rowconfigure(0, weight=1)
 
     left = ttk.Frame(main, style="App.TFrame")
-    left.grid(row=2, column=0, sticky="n", padx=(0, PAD))
+    left.grid(row=0, column=0, sticky="n", padx=(0, PAD))
     _build_search_space(left)
     _build_checks_panel(left)
 
     right = ttk.Frame(main, style="App.TFrame")
-    right.grid(row=2, column=1, sticky="nsew")
+    right.grid(row=0, column=1, sticky="nsew")
     right.rowconfigure(0, weight=1)
     right.columnconfigure(0, weight=1)
     _build_result_panel(right)
 
     bar = ttk.Frame(main, style="App.TFrame")
-    bar.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(PAD, 0))
+    bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(PAD, 0))
     ttk.Button(bar, text="Exit", style="Danger.TButton",
                command=button_exit_callback).pack(side="right", padx=(0, PAD))
     pgs_button = ttk.Button(bar, text="PGS", style="Accent.TButton",

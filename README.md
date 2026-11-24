@@ -126,12 +126,15 @@ The left sidebar groups the parameters into four vertically scrollable cards (**
 | Plot option | Scope of the interactive preview: `Stage1` / `Stage2` / `Total`, or a single gear: `Gs1`, `Gp1`, `Gr1` (stage 1), `Gp2`, `Gr2` (stage 2) — only the selected layout is drawn. Simple offers the stage-1 options only. The saved images always cover every applicable scope (see "Result files") |
 | Teeth profile | `Involute Teeth` (GPG) / `Cycloid Teeth` (CPG), or **`All`** to overlay both profiles in one plot (involute grey/black, cycloid blue) |
 
-### Run, Tip Check, Load & Save
+### Run, Animation, Tip Check, Load & Save
 
-- **Run** computes the gearbox, saves all output files into the project's `result/` directory (the same files **Save** writes), renders the saved Markdown report (including linked drawings) in the Result panel, and shows the plot preview of the selected Plot option. When any active tooth profile fails the kinematic 1-pitch tip interference check, a zoomed worst-phase inspection window automatically opens alongside the preview with interfering points marked in red.
+- **Run** computes the gearbox, saves only `README.md` and its linked summary drawings (`Involute_Total.png` / `Cycloid_Total.png` for 3K-Wolfrom; `Involute_Stage1.png` / `Cycloid_Stage1.png` for Simple) into the project's `result/` directory for fast execution, renders the formatted Markdown report (including inline drawings) in the Result panel, and opens the interactive plot preview non-blocking (re-enabling the buttons immediately). Step progress and elapsed time are shown live on the bottom-left progress bar. When any active tooth profile fails the kinematic 1-pitch tip interference check, a zoomed worst-phase inspection window automatically opens alongside the preview with interfering points marked in red.
+- **Animation** (immediately right of **Run**) opens an interactive popup window (`animation.py`) that animates every gearbox element (`Gs1`, `Gp1`, `Gr1`, `Carrier`, and `Gp2`/`Gr2` for 3K-Wolfrom) at its exact calculated kinematic ratio. Supports lockup-mode switching, stage filtering (`Total` / `Stage1` / `Stage2`), active tooth profiles (`Involute` / `Cycloid` / `All`), play/pause (`Space`), reset (`R`), `±5°` stepping (`←`/`→`), direction toggle, visual input-speed slider, pitch-circle and carrier/marker overlays, interactive zoom/pan toolbar, and a live ratio/speed/angle table.
 - **Tip Check** runs the calculation and opens the zoomed worst-phase tip-interference inspection window on demand for every active profile (`Involute`, `Cycloid`, or both when `All` is selected), even when all checks pass.
 - **Load** asks for a `README.md` file (e.g. a previously saved `Result/README.md`), reads its `## Input Parameters` section, refills the input widgets (ring tooth counts are stored negative in the report and converted back to the positive numbers the fields expect; legacy reports with a single `mu_b` value automatically populate all four bearing inputs), and runs the calculation like **Run**. It is the way to reopen and continue a saved design. The same refill happens automatically at startup when a report path is passed on the command line (`uv run design.py Result/README.md`).
-- **Save** re-runs the calculation, asks which folder to use (directory picker), then creates a `Result` directory inside it and writes every output file — including the `Result/README.md` that **Load** reads back.
+- **Save** re-runs the calculation, asks which folder to use (directory picker), then creates a `Result` directory inside it and writes every output file — including `Result/README.md`, `model.csv`, all drawings (`Involute_*`/`Cycloid_*`/`All_*`/`TipCheck_*`), and all per-gear FGPG2 subfolders — while displaying live step progress and elapsed time.
+
+![](./img/PGS_05.png)
 
 ### Command line (headless)
 
@@ -150,7 +153,9 @@ Note: since the report is written as `README.md` in the input file's folder, an 
 
 ### Result files
 
-The `Result/` folder created by **Save** contains:
+**Run** writes only `README.md` and its two linked summary drawings (`Involute_Total.png` / `Cycloid_Total.png` for 3K-Wolfrom; `Involute_Stage1.png` / `Cycloid_Stage1.png` for Simple) into the project's `result/` directory for fast iteration.
+
+The full `Result/` folder created by **Save** (or `PGS_CLI.py ... SaveAll`) contains:
 
 ```
 Result/
@@ -205,7 +210,8 @@ The **Result** panel renders the report as formatted Markdown and includes a **C
 
 | File | Purpose |
 |------|---------|
-| `design.py` | GUI entry point (ttk theme, layout, event handlers, matplotlib plotting, report/CSV output) |
+| `design.py` | GUI entry point (ttk theme, layout, progress/elapsed-time status bar, event handlers, non-blocking matplotlib plotting, Markdown rendering, report/CSV output) |
+| `animation.py` | Interactive 2D planetary gearbox animation popup — animates all gearbox elements at exact calculated ratios with mode/stage switching, playback controls, and live kinematics table |
 | `PGS.py` | Planetary gear sizing logic |
 | `GPG.py` | Generic involute gear profile generation (external/internal gears) |
 | `CPG.py` | Cycloidal gear profile generator, drop-in replacement sharing the `GPG` interface |

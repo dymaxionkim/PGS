@@ -122,12 +122,15 @@ uv run PRE-OPT_3K-WOLFROM.py   # 또는 PRE-OPT_3K-WOLFROM.bat / .sh
 | Plot option | 인터랙티브 프리뷰 범위: `Stage1` / `Stage2` / `Total` 또는 단일 기어 `Gs1`, `Gp1`, `Gr1`(1단), `Gp2`, `Gr2`(2단) — 선택한 구성만 그림. Simple에서는 1단 옵션만 제공. 저장되는 이미지는 항상 적용 가능한 모든 범위를 포함("결과 파일" 참조) |
 | Teeth profile | `Involute Teeth` (GPG) / `Cycloid Teeth` (CPG) 또는 두 치형을 한 도면에 겹쳐 그리는 **`All`** (인볼루트 회색/검정, 사이클로이드 파랑) |
 
-### Run, Tip Check, Load & Save
+### Run, Animation, Tip Check, Load & Save
 
-- **Run** — 기어박스를 계산하고 프로젝트의 `result/` 디렉토리에 모든 출력 파일을 저장한 뒤, Result 패널에 저장된 Markdown 보고서(이미지 포함)를 렌더링하며 선택한 Plot option의 인터랙티브 프리뷰를 표시합니다. 활성 치형 중 운동학적 1피치 이끝 간섭 검사에서 `Fail`이 발생하면 간섭 지점이 빨간 점으로 표시된 최악 위상 확대 검사 창이 자동으로 함께 열립니다.
+- **Run** — 기어박스를 계산하고 빠른 실행을 위해 프로젝트의 `result/` 디렉토리에 `README.md`와 링크된 요약 도면 2종(3K-Wolfrom: `Involute_Total.png`·`Cycloid_Total.png`, Simple: `Involute_Stage1.png`·`Cycloid_Stage1.png`)만 저장한 뒤, Result 패널에 렌더링된 Markdown 보고서(인라인 이미지 포함)를 표시하고 비차단(non-blocking) 방식으로 인터랙티브 플롯 프리뷰를 엽니다(완료 즉시 버튼 재활성화). 하단 좌측 진행률 바에 단계별 진행 상황과 경과 시간이 실시간으로 표시됩니다. 활성 치형 중 운동학적 1피치 이끝 간섭 검사에서 `Fail`이 발생하면 간섭 지점이 빨간 점으로 표시된 최악 위상 확대 검사 창이 자동으로 함께 열립니다.
+- **Animation** (**Run** 바로 오른쪽) — 계산된 정확한 속도비에 따라 기어박스의 모든 요소(`Gs1`, `Gp1`, `Gr1`, `Carrier`, 3K-Wolfrom의 `Gp2`·`Gr2`)를 실시간으로 애니메이션하는 팝업 창(`animation.py`)을 엽니다. 구속 모드 전환, 스테이지 필터(`Total` / `Stage1` / `Stage2`), 활성 치형(`Involute` / `Cycloid` / `All`), 재생/일시정지(`Space`), 초기화(`R`), `±5°` 스텝(`←`/`→`), 회전 방향 전환, 시각적 입력 속도 슬라이더, 피치원·캐리어/마커 토글, 줌/팬 툴바, 실시간 속도비·RPM·회전각 테이블을 지원합니다.
 - **Tip Check** — 계산을 실행하고 모든 검사가 통과(`OK`)한 경우에도 현재 활성화된 모든 프로파일(`Involute`, `Cycloid`, 또는 `All` 선택 시 둘 다)의 최악 위상 확대 이끝 간섭 검사 창을 즉시 엽니다.
 - **Load** — 저장된 `README.md` 파일(예: `Result/README.md`)을 선택하면 `## Input Parameters` 섹션을 읽어 입력 위젯을 자동으로 다시 채우고(보고서에 음수로 저장된 링 잇수는 양수로 자동 변환되며, 단일 `mu_b`만 기록된 구버전 보고서도 4개 베어링 입력에 자동 반영됨) **Run**과 동일하게 계산을 실행합니다. 저장된 설계를 다시 열어 수정할 때 사용하며, 명령줄 인자로 보고서 경로를 넘길 때(`uv run design.py Result/README.md`)도 동일한 자동 입력이 수행됩니다.
-- **Save** — 계산을 재실행하고 폴더 선택 대화상자로 지정한 경로 아래에 `Result` 디렉토리를 생성하여 **Load**에서 다시 불러올 수 있는 `Result/README.md`를 포함한 모든 결과 파일을 저장합니다.
+- **Save** — 계산을 재실행하고 폴더 선택 대화상자로 지정한 경로 아래에 `Result` 디렉토리를 생성하여 `Result/README.md`, `model.csv`, 전체 도면(`Involute_*`/`Cycloid_*`/`All_*`/`TipCheck_*`), 기어별 FGPG2 하위 폴더를 포함한 모든 결과 파일을 저장하며, 하단 진행률 바에 진행 상황과 경과 시간을 표시합니다.
+
+![](./img/PGS_05.png)
 
 ### 명령줄 실행 (헤드리스 CLI)
 
@@ -146,7 +149,9 @@ uv run PGS_CLI.py <README.md> [SaveAll|SaveOK|SaveMD]
 
 ### 결과 파일 (Result files)
 
-**Save**로 생성되는 `Result/` 폴더(및 **Run** 시 프로젝트의 `result/` 폴더)의 구성은 다음과 같습니다.
+**Run** 실행 시에는 빠른 반복 설계를 위해 프로젝트의 `result/` 폴더에 `README.md`와 링크된 요약 도면 2종(3K-Wolfrom: `Involute_Total.png`·`Cycloid_Total.png`, Simple: `Involute_Stage1.png`·`Cycloid_Stage1.png`)만 저장됩니다.
+
+**Save** (또는 `PGS_CLI.py ... SaveAll`)로 생성되는 전체 `Result/` 폴더의 구성은 다음과 같습니다.
 
 ```
 Result/
@@ -201,7 +206,8 @@ Result/
 
 | 파일 | 역할 |
 |------|------|
-| `design.py` | GUI 진입점 (ttk 테마, 레이아웃, 이벤트 핸들러, matplotlib 도면, Markdown 렌더링 및 보고서/CSV 출력) |
+| `design.py` | GUI 진입점 (ttk 테마, 레이아웃, 진행률·소요시간 상태바, 이벤트 핸들러, 비차단 matplotlib 도면, Markdown 렌더링 및 보고서/CSV 출력) |
+| `animation.py` | 인터랙티브 2D 유성기어박스 애니메이션 팝업 — 계산된 정확한 속도비로 모든 기어 요소를 애니메이션하며 구동 모드·스테이지 전환, 재생 제어, 실시간 기구학 테이블 제공 |
 | `PGS.py` | 유성기어장치 치수 및 효율·역구동성 계산 로직 |
 | `GPG.py` | 범용 인볼루트 치형 생성기 (외치/내치 공용) |
 | `CPG.py` | 사이클로이드 치형 생성기 (`GPG`와 동일 인터페이스의 교체 모듈) |
