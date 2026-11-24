@@ -17,6 +17,7 @@ import re
 import sys
 import tkinter as tk
 import tkinter.font as font
+import webbrowser
 from dataclasses import replace
 from tkinter import filedialog
 from tkinter import messagebox
@@ -24,6 +25,12 @@ from tkinter import ttk
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+try:
+    from PIL import Image, ImageTk
+except ImportError:  # pragma: no cover - pillow is optional for inline images
+    Image = None
+    ImageTk = None
 
 import FGPG2_CLI
 import interference
@@ -35,6 +42,8 @@ DEFAULT_SCALE = 0.7
 DEFAULT_WINDOW_HEIGHT_RATIO = 0.70
 PLOT_DPI = 100
 PGS_FIGURE = "PGS"
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_RESULT_DIR = os.path.join(PROJECT_DIR, "result")
 
 # Per-gear result generation uses the FGPG2 gear generator that has been
 # ported into this project (the ``fgpg2`` package + ``FGPG2_CLI.py``): it
@@ -226,11 +235,15 @@ TYPE_CODE_TO_LABEL = {code: label for label, code in TYPE_ITEMS}
 app: tk.Tk
 entries: dict[str, tk.Widget] = {}
 textbox: tk.Text
+report_markdown: str = ""
+current_markdown: str = ""
 P1: PGS
 gears: dict[str, GPG | CPG]
 gears_second: dict[str, GPG | CPG] | None = None
 interference_reports: list[interference.ProfileInterferenceReport] = []
+run_button: ttk.Button | None = None
 save_button: ttk.Button | None = None
+result_copy_button: ttk.Button | None = None
 result_search_var: tk.StringVar | None = None
 result_search_entry: ttk.Entry | None = None
 result_search_status: ttk.Label | None = None
@@ -627,22 +640,34 @@ def save_pngs(out_dir: str) -> None:
         for scope, code in whole + gear_scopes:
             _draw(_PLOT_CODE_KEYS[code], [(involute, False), (cycloid, True)],
                   os.path.join(out_dir, f"All_{scope}.png"))
+    else:
+        for stale in (
+            "All_Total.png",
+            "All_Stage1.png",
+            "Cycloid_Total.png",
+            "Cycloid_Stage1.png",
+            "TipCheck_Cycloid.png",
+        ):
+            stale_path = os.path.join(out_dir, stale)
+            if os.path.isfile(stale_path):
+                try:
+                    os.remove(stale_path)
+                except OSError:
+                    pass
 
-    # Save zoomed worst-phase interference plots whenever a profile fails the
-    # kinematic 1-pitch tip interference check.
+    # Always save zoomed worst-phase tip-interference inspection plots for
+    # Involute (and Cycloid when available), regardless of pass/fail status.
     inv_rep = interference.check_profile_interference(P1, involute, "Involute")
-    if inv_rep.has_fail:
-        interference.plot_interference_report(
-            P1, involute, inv_rep,
-            out_path=os.path.join(out_dir, "TipCheck_Involute.png"),
-        )
+    interference.plot_interference_report(
+        P1, involute, inv_rep,
+        out_path=os.path.join(out_dir, "TipCheck_Involute.png"),
+    )
     if cycloid is not None:
         cyc_rep = interference.check_profile_interference(P1, cycloid, "Cycloid")
-        if cyc_rep.has_fail:
-            interference.plot_interference_report(
-                P1, cycloid, cyc_rep,
-                out_path=os.path.join(out_dir, "TipCheck_Cycloid.png"),
-            )
+        interference.plot_interference_report(
+            P1, cycloid, cyc_rep,
+            out_path=os.path.join(out_dir, "TipCheck_Cycloid.png"),
+        )
 
 
 def plot_tip_check(*, only_if_fail: bool = False, show: bool = True) -> None:
@@ -843,11 +868,13 @@ def _append_gear_specs(lines: list[str]) -> None:
         lines.append(f"* Outer Circle Dia = {2 * gear.module * (gear.teeth / 2 + gear.shift_factor + gear.addendum_factor)} [mm]\n\n")
 
 
-def build_report() -> None:
-    """Compose the Markdown report and place it into the textbox."""
+def _compose_report_markdown() -> str:
+    """Compose the full Markdown report string for the current calculation."""
     lines: list[str] = []
     lines.append("# PGS - Planetary Gear Sizing Program\n\n")
-    lines.append("![](./" + ("All_Total.png" if P1.is_wolfrom else "All_Stage1.png") + ")\n\n")
+    scope = "Total" if P1.is_wolfrom else "Stage1"
+    lines.append(f"![](./Cycloid_{scope}.png)\n")
+    lines.append(f"![](./Involute_{scope}.png)\n\n")
     _append_checks(lines)
     _append_inputs(lines)
     if P1.is_wolfrom:
@@ -855,8 +882,37 @@ def build_report() -> None:
     else:
         _append_simple(lines)
     _append_gear_specs(lines)
-    textbox.delete("0.0", "end")
-    textbox.insert("0.0", "".join(lines))
+    return "".join(lines)
+
+
+def build_report(base_dir: str | None = None) -> None:
+    """Compose the Markdown report and render it into the Result textbox."""
+    global report_markdown
+    report_markdown = _compose_report_markdown()
+    if _is_tk_text(textbox):
+        _render_markdown(textbox, report_markdown, base_dir=base_dir)
+    else:
+        textbox.delete("0.0", "end")
+        textbox.insert("0.0", report_markdown)
+    if result_search_var is not None:
+        _update_result_search(jump_first=True)
+
+
+def _save_and_show_result(out_dir: str) -> None:
+    """Save all outputs into ``out_dir`` and render its saved README.md."""
+    global report_markdown
+    report_markdown = _compose_report_markdown()
+    save_output(out_dir)
+    save_pngs(out_dir)
+    readme_path = os.path.join(out_dir, "README.md")
+    with open(readme_path, encoding="utf-8") as f:
+        saved_md = f.read()
+    report_markdown = saved_md
+    if _is_tk_text(textbox):
+        _render_markdown(textbox, saved_md, base_dir=out_dir)
+    else:
+        textbox.delete("0.0", "end")
+        textbox.insert("0.0", saved_md)
     if result_search_var is not None:
         _update_result_search(jump_first=True)
 
@@ -903,8 +959,9 @@ def _generate_fgpg2_results(folder: str, profile: str = "involute") -> None:
 def save_output(out_dir: str) -> None:
     """Write the Markdown report, model CSV and per-gear results."""
     os.makedirs(out_dir, exist_ok=True)
+    md_content = report_markdown if report_markdown else textbox.get("0.0", "end")
     with open(out_dir + "/README.md", "w", encoding="utf-8") as f:
-        f.write(textbox.get("0.0", "end"))
+        f.write(md_content)
     _write_input_model_csv(out_dir + "/model.csv")
     # Gear folders: the Stage-1 gears always, Stage-2 Gp2/Gr2 for the Wolfrom
     # type only.  Gs2 is never exported.
@@ -1228,18 +1285,24 @@ def button_load_callback() -> None:
             "section.")
         return
     toggle_simple_fields()
-    read_parameters()
-    run_calc()
-    build_report()
-    plot_pgs()
+    button_run_callback()
 
 
 def button_run_callback() -> None:
-    """Compute, show the report text and plot the preview (no file output)."""
-    read_parameters()
-    run_calc()
-    build_report()
-    plot_pgs()
+    """Compute, save all result files to ``result/``, render README.md and plot."""
+    if run_button is not None:
+        run_button.configure(state="disabled")
+        app.update_idletasks()
+    try:
+        read_parameters()
+        run_calc()
+        _save_and_show_result(DEFAULT_RESULT_DIR)
+        print("Result files saved in " + DEFAULT_RESULT_DIR)
+        plot_pgs()
+    finally:
+        if run_button is not None:
+            run_button.configure(state="normal")
+            app.update_idletasks()
 
 
 def button_tip_check_callback() -> None:
@@ -1270,9 +1333,7 @@ def button_save_callback() -> None:
         out_dir = os.path.join(folder, "Result")
         read_parameters()
         run_calc()
-        build_report()
-        save_output(out_dir)
-        save_pngs(out_dir)
+        _save_and_show_result(out_dir)
         print("Result files saved in " + out_dir)
     finally:
         if save_button is not None:
@@ -1477,9 +1538,494 @@ def _focus_result_search(_event=None) -> str:
     return "break"
 
 
+# -------------------------------------------------------- markdown renderer
+WELCOME_MARKDOWN = (
+    "# PGS - Planetary Gear Sizing Program\n\n"
+    "[https://github.com/dymaxionkim/PGS](https://github.com/dymaxionkim/PGS)\n\n"
+    "---\n\n"
+    "1. Input Parameters.\n"
+    "2. Press **Run** to compute, save to `result/` & plot, or **Save** to export "
+    "into a folder you choose.\n"
+)
+
+_MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+\s*)?$")
+_MD_HR_RE = re.compile(r"^\s*(?:[-*_]\s*){3,}$")
+_MD_UL_RE = re.compile(r"^([ \t]*)[*+-]\s+(.*)$")
+_MD_OL_RE = re.compile(r"^([ \t]*)(\d+)\.\s+(.*)$")
+_MD_QUOTE_RE = re.compile(r"^\s*>\s?(.*)$")
+_MD_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+_MD_BLOCK_IMG_RE = re.compile(r"^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$")
+_MD_TABLE_SEP_RE = re.compile(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$")
+_MD_INLINE_RE = re.compile(
+    r"\\([\\`*_{}\[\]()#+\-.!~|])"                 # 1: escaped char
+    r"|`([^`]+)`"                                  # 2: inline code
+    r"|!\[([^\]]*)\]\(([^)]+)\)"                   # 3,4: inline image
+    r"|\[([^\]]+)\]\(([^)\s]+)\)"                  # 5,6: markdown link
+    r"|\*\*\*([^*]+?)\*\*\*"                       # 7: bold + italic
+    r"|\*\*([^*]+?)\*\*"                           # 8: bold (**)
+    r"|(?<!\w)__([^_]+?)__(?!\w)"                  # 9: bold (__)
+    r"|\*([^*\s](?:[^*]*?[^*\s])?)\*"              # 10: italic (*)
+    r"|(?<!\w)_([^_\s](?:[^_]*?[^_\s])?)_(?!\w)"   # 11: italic (_)
+    r"|~~([^~]+?)~~"                               # 12: strikethrough
+    r"|(https?://[^\s<>)\]]+)"                     # 13: bare URL
+)
+_MD_BULLETS = ("•", "◦", "▪")
+
+
+def _is_tk_text(widget: object) -> bool:
+    """Return True when ``widget`` is a real Tkinter ``Text`` widget."""
+    return isinstance(widget, tk.Text)
+
+
+def _resize_md_rules(event) -> None:
+    """Keep embedded horizontal-rule frames matched to the Text widget width."""
+    w = event.widget
+    rules = getattr(w, "_md_rules", None)
+    if not rules:
+        return
+    target_w = max(40, event.width - 32)
+    if getattr(w, "_md_last_rule_width", None) == target_w:
+        return
+    w._md_last_rule_width = target_w
+    for rule in rules:
+        if rule.winfo_exists():
+            rule.configure(width=target_w)
+
+
+def _configure_markdown_tags(widget: tk.Text) -> None:
+    """Configure Markdown typography, layout, link and search tags on ``widget``."""
+    widget._md_rules = []  # type: ignore[attr-defined]
+    widget._md_images = []  # type: ignore[attr-defined]
+    widget._md_link_tags = []  # type: ignore[attr-defined]
+    widget._md_last_rule_width = None  # type: ignore[attr-defined]
+
+    widget.tag_configure("md_h1", font=("Segoe UI", 14, "bold"),
+                         foreground="#111827", spacing1=4, spacing3=2)
+    widget.tag_configure("md_h2", font=("Segoe UI", 12, "bold"),
+                         foreground=ACCENT, spacing1=12, spacing3=2)
+    widget.tag_configure("md_h3", font=("Segoe UI", 11, "bold"),
+                         foreground="#1e3a8a", spacing1=8, spacing3=2)
+    widget.tag_configure("md_h4", font=("Segoe UI", 10, "bold"),
+                         foreground="#374151", spacing1=6, spacing3=1)
+    widget.tag_configure("md_h5", font=("Segoe UI", 9, "bold"),
+                         foreground="#4b5563", spacing1=5, spacing3=1)
+    widget.tag_configure("md_h6", font=("Segoe UI", 9, "bold"),
+                         foreground=MUTED, spacing1=4, spacing3=1)
+    widget.tag_configure("md_hr_line", font=("Segoe UI", 2),
+                         spacing1=2, spacing3=6)
+    widget.tag_configure("md_p", font=("Segoe UI", 10),
+                         foreground=FG, spacing1=1, spacing3=4)
+
+    for level, (m1, m2) in enumerate(((12, 24), (28, 40), (44, 56))):
+        widget.tag_configure(f"md_li_{level}", lmargin1=m1, lmargin2=m2,
+                             spacing1=1, spacing3=1)
+    widget.tag_configure("md_bullet_0", foreground=ACCENT,
+                         font=("Segoe UI", 10, "bold"))
+    widget.tag_configure("md_bullet_1", foreground=MUTED,
+                         font=("Segoe UI", 10))
+    widget.tag_configure("md_bullet_2", foreground=MUTED,
+                         font=("Segoe UI", 9))
+
+    for level, (m1, m2) in enumerate(((12, 30), (28, 46), (44, 62))):
+        widget.tag_configure(f"md_oli_{level}", lmargin1=m1, lmargin2=m2,
+                             spacing1=1, spacing3=1)
+    widget.tag_configure("md_ol_num", foreground=ACCENT,
+                         font=("Segoe UI", 10, "bold"))
+
+    widget.tag_configure("md_bold", font=("Segoe UI", 10, "bold"))
+    widget.tag_configure("md_italic", font=("Segoe UI", 10, "italic"))
+    widget.tag_configure("md_bold_italic", font=("Segoe UI", 10, "bold italic"))
+    widget.tag_configure("md_strike", overstrike=True, foreground=MUTED)
+    widget.tag_configure("md_code", font=("Consolas", 9),
+                         background="#f1f5f9", foreground="#be123c")
+    widget.tag_configure("md_heading_code", background="#f1f5f9",
+                         foreground="#be123c")
+    widget.tag_configure("md_link", foreground=ACCENT, underline=True)
+    widget.tag_configure("md_image_badge", font=("Segoe UI", 9, "italic"),
+                         foreground="#475569", background="#f1f5f9")
+    widget.tag_configure("md_image_line", spacing1=3, spacing3=5)
+
+    widget.tag_configure("md_quote", lmargin1=14, lmargin2=24,
+                         background="#f8fafc", foreground="#475569",
+                         spacing1=2, spacing3=2)
+    widget.tag_configure("md_quote_bar", foreground=ACCENT,
+                         font=("Segoe UI", 10, "bold"))
+    widget.tag_configure("md_codeblock", font=("Consolas", 9),
+                         background="#f8fafc", foreground="#0f172a",
+                         lmargin1=12, lmargin2=12, rmargin=12,
+                         spacing1=1, spacing3=1)
+    widget.tag_configure("md_table_header", font=("Consolas", 9, "bold"),
+                         background="#f1f5f9", foreground="#111827",
+                         lmargin1=10, lmargin2=10, spacing1=2, spacing3=2)
+    widget.tag_configure("md_table_row", font=("Consolas", 9),
+                         background=CARD, foreground=FG,
+                         lmargin1=10, lmargin2=10, spacing1=1, spacing3=1)
+    widget.tag_configure("md_table_alt", font=("Consolas", 9),
+                         background="#f9fafb", foreground=FG,
+                         lmargin1=10, lmargin2=10, spacing1=1, spacing3=1)
+
+    widget.tag_bind("md_link", "<Enter>",
+                    lambda _e: widget.configure(cursor="hand2"))
+    widget.tag_bind("md_link", "<Leave>",
+                    lambda _e: widget.configure(cursor=""))
+
+    widget.tag_configure("search_match", background="#fef08a", foreground=FG)
+    widget.tag_configure("search_current", background="#f97316", foreground="#ffffff")
+    widget.tag_raise("search_match")
+    widget.tag_raise("search_current", "search_match")
+
+    widget.bind("<Configure>", _resize_md_rules, add="+")
+    widget.bind("<Button-1>", lambda _e: widget.focus_set(), add="+")
+
+    def _select_all(_event=None) -> str:
+        widget.tag_add("sel", "1.0", "end-1c")
+        return "break"
+
+    widget.bind("<Control-a>", _select_all)
+    widget.bind("<Control-A>", _select_all)
+
+
+def _insert_md_hr(widget: tk.Text, color: str = BORDER, height: int = 1) -> None:
+    """Insert a full-width horizontal rule into ``widget``."""
+    w = widget.winfo_width()
+    width = max(40, w - 32) if w > 1 else 420
+    rule = tk.Frame(widget, height=height, width=width,
+                    background=color, borderwidth=0, highlightthickness=0)
+    widget._md_rules.append(rule)  # type: ignore[attr-defined]
+    widget.window_create("end", window=rule, stretch=False)
+    widget.insert("end", "\n", ("md_hr_line",))
+
+
+def _insert_md_link(widget: tk.Text, label: str, url: str,
+                    base_tags: tuple[str, ...]) -> None:
+    """Insert a styled, clickable hyperlink into ``widget``."""
+    link_tags: list[str] = widget._md_link_tags  # type: ignore[attr-defined]
+    tag = f"md_link_url_{len(link_tags)}"
+    link_tags.append(tag)
+    widget.insert("end", label, base_tags + ("md_link", tag))
+    widget.tag_bind(tag, "<Button-1>",
+                    lambda _e, target=url: webbrowser.open(target))
+
+
+def _insert_md_inline(
+    widget: tk.Text,
+    text: str,
+    base_tags: tuple[str, ...],
+    *,
+    is_heading: bool = False,
+) -> None:
+    """Parse inline Markdown spans in ``text`` and insert them into ``widget``."""
+    pos = 0
+    for m in _MD_INLINE_RE.finditer(text):
+        if m.start() > pos:
+            widget.insert("end", text[pos:m.start()], base_tags)
+        if m.group(1) is not None:
+            widget.insert("end", m.group(1), base_tags)
+        elif m.group(2) is not None:
+            code_tag = "md_heading_code" if is_heading else "md_code"
+            widget.insert("end", m.group(2), base_tags + (code_tag,))
+        elif m.group(4) is not None:
+            alt, src = m.group(3), m.group(4)
+            label = alt.strip() or os.path.basename(src.strip()) or src.strip()
+            widget.insert("end", f" [Image: {label}] ",
+                          base_tags + ("md_image_badge",))
+        elif m.group(5) is not None:
+            _insert_md_link(widget, m.group(5), m.group(6), base_tags)
+        elif m.group(7) is not None:
+            extra = () if is_heading else ("md_bold_italic",)
+            widget.insert("end", m.group(7), base_tags + extra)
+        elif m.group(8) is not None or m.group(9) is not None:
+            content = m.group(8) if m.group(8) is not None else m.group(9)
+            extra = () if is_heading else ("md_bold",)
+            widget.insert("end", content, base_tags + extra)
+        elif m.group(10) is not None or m.group(11) is not None:
+            content = m.group(10) if m.group(10) is not None else m.group(11)
+            extra = () if is_heading else ("md_italic",)
+            widget.insert("end", content, base_tags + extra)
+        elif m.group(12) is not None:
+            widget.insert("end", m.group(12), base_tags + ("md_strike",))
+        elif m.group(13) is not None:
+            url = m.group(13)
+            _insert_md_link(widget, url, url, base_tags)
+        pos = m.end()
+    if pos < len(text):
+        widget.insert("end", text[pos:], base_tags)
+
+
+def _insert_md_block_image(
+    widget: tk.Text,
+    alt: str,
+    src: str,
+    base_dir: str | None,
+) -> None:
+    """Render a block-level Markdown image (embedded if local file exists, else badge)."""
+    src_clean = src.strip()
+    img_path: str | None = None
+    if os.path.isabs(src_clean) and os.path.isfile(src_clean):
+        img_path = src_clean
+    elif base_dir:
+        candidate = os.path.normpath(os.path.join(base_dir, src_clean))
+        if os.path.isfile(candidate):
+            img_path = candidate
+
+    if img_path is not None and Image is not None and ImageTk is not None:
+        try:
+            resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+            w = widget.winfo_width()
+            max_w = min(max(240, w - 40), 420) if w > 1 else 360
+            with Image.open(img_path) as im:
+                im = im.copy()
+                im.thumbnail((max_w, 360), resample)
+                photo = ImageTk.PhotoImage(im)
+            widget._md_images.append(photo)  # type: ignore[attr-defined]
+            widget.image_create("end", image=photo)
+            widget.insert("end", "\n", ("md_image_line",))
+            return
+        except Exception:
+            pass
+
+    label = alt.strip() or os.path.basename(src_clean) or src_clean
+    widget.insert("end", f"  [Image: {label}]  ", ("md_image_badge", "md_image_line"))
+    widget.insert("end", "\n", ("md_image_line",))
+
+
+def _split_table_cells(line: str) -> list[str]:
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    return [cell.strip() for cell in stripped.split("|")]
+
+
+def _insert_md_table(widget: tk.Text, table_lines: list[str]) -> None:
+    """Render a GFM pipe table into ``widget`` with aligned monospace columns."""
+    header = _split_table_cells(table_lines[0])
+    sep_cells = _split_table_cells(table_lines[1])
+    rows = [_split_table_cells(r) for r in table_lines[2:]]
+    ncols = max(len(header), *(len(r) for r in rows)) if rows else len(header)
+    header += [""] * (ncols - len(header))
+    aligns: list[str] = []
+    for idx in range(ncols):
+        cell = sep_cells[idx] if idx < len(sep_cells) else "---"
+        left = cell.startswith(":")
+        right = cell.endswith(":")
+        aligns.append("center" if (left and right) else ("right" if right else "left"))
+    widths = [len(h) for h in header]
+    for r in rows:
+        r += [""] * (ncols - len(r))
+        for idx, cell in enumerate(r):
+            widths[idx] = max(widths[idx], len(cell))
+
+    def _fmt(cells: list[str]) -> str:
+        parts = []
+        for idx, cell in enumerate(cells):
+            w = widths[idx]
+            al = aligns[idx]
+            if al == "right":
+                parts.append(cell.rjust(w))
+            elif al == "center":
+                parts.append(cell.center(w))
+            else:
+                parts.append(cell.ljust(w))
+        return " " + " │ ".join(parts) + " \n"
+
+    widget.insert("end", _fmt(header), ("md_table_header",))
+    for r_idx, r in enumerate(rows):
+        tag = "md_table_row" if r_idx % 2 == 0 else "md_table_alt"
+        widget.insert("end", _fmt(r), (tag,))
+
+
+def _render_markdown(
+    widget: tk.Text,
+    md_text: str,
+    *,
+    base_dir: str | None = None,
+) -> None:
+    """Render Markdown text into a Tkinter ``Text`` widget with styled tags."""
+    global current_markdown
+    current_markdown = md_text
+    if not hasattr(widget, "_md_rules"):
+        _configure_markdown_tags(widget)
+
+    widget.configure(state="normal")
+    try:
+        for rule in widget._md_rules:  # type: ignore[attr-defined]
+            if rule.winfo_exists():
+                rule.destroy()
+        widget._md_rules.clear()  # type: ignore[attr-defined]
+        widget._md_images.clear()  # type: ignore[attr-defined]
+        for old_tag in widget._md_link_tags:  # type: ignore[attr-defined]
+            widget.tag_delete(old_tag)
+        widget._md_link_tags.clear()  # type: ignore[attr-defined]
+        widget._md_last_rule_width = None  # type: ignore[attr-defined]
+
+        widget.delete("1.0", "end")
+
+        lines = md_text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        n = len(lines)
+        i = 0
+        in_code = False
+        code_fence = ""
+        last_kind = "start"
+
+        while i < n:
+            line = lines[i]
+
+            # Fenced code block (``` or ~~~)
+            fence_m = _MD_FENCE_RE.match(line)
+            if fence_m:
+                marker = fence_m.group(1)
+                if not in_code:
+                    in_code = True
+                    code_fence = marker
+                    i += 1
+                    continue
+                if marker == code_fence:
+                    in_code = False
+                    code_fence = ""
+                    last_kind = "code"
+                    i += 1
+                    continue
+            if in_code:
+                widget.insert("end", line + "\n", ("md_codeblock",))
+                last_kind = "code"
+                i += 1
+                continue
+
+            # Blank line: skip immediately after start, heading, HR or blank
+            if not line.strip():
+                if last_kind not in ("start", "blank", "heading", "hr"):
+                    widget.insert("end", "\n")
+                    last_kind = "blank"
+                i += 1
+                continue
+
+            # Horizontal rule
+            if _MD_HR_RE.match(line):
+                _insert_md_hr(widget, color=BORDER, height=1)
+                last_kind = "hr"
+                i += 1
+                continue
+
+            # ATX heading (# .. ######)
+            h_m = _MD_HEADING_RE.match(line)
+            if h_m:
+                level = len(h_m.group(1))
+                htag = f"md_h{level}"
+                _insert_md_inline(widget, h_m.group(2).strip(),
+                                  (htag,), is_heading=True)
+                widget.insert("end", "\n", (htag,))
+                if level == 1:
+                    _insert_md_hr(widget, color=BORDER, height=2)
+                elif level == 2:
+                    _insert_md_hr(widget, color="#e5e7eb", height=1)
+                last_kind = "heading"
+                i += 1
+                continue
+
+            # Standalone block image: ![alt](src)
+            img_m = _MD_BLOCK_IMG_RE.match(line)
+            if img_m:
+                _insert_md_block_image(widget, img_m.group(1), img_m.group(2),
+                                       base_dir)
+                last_kind = "image"
+                i += 1
+                continue
+
+            # Pipe table
+            if ("|" in line and i + 1 < n
+                    and _MD_TABLE_SEP_RE.match(lines[i + 1])):
+                tbl = [line, lines[i + 1]]
+                i += 2
+                while i < n and "|" in lines[i] and lines[i].strip():
+                    tbl.append(lines[i])
+                    i += 1
+                _insert_md_table(widget, tbl)
+                last_kind = "table"
+                continue
+
+            # Blockquote
+            q_m = _MD_QUOTE_RE.match(line)
+            if q_m:
+                widget.insert("end", "▎ ", ("md_quote", "md_quote_bar"))
+                _insert_md_inline(widget, q_m.group(1), ("md_quote",))
+                widget.insert("end", "\n", ("md_quote",))
+                last_kind = "quote"
+                i += 1
+                continue
+
+            # Unordered list item
+            ul_m = _MD_UL_RE.match(line)
+            if ul_m:
+                indent = len(ul_m.group(1).replace("\t", "  "))
+                level = min(indent // 2, 2)
+                li_tag = f"md_li_{level}"
+                bullet = _MD_BULLETS[level]
+                widget.insert("end", f"{bullet} ",
+                              (li_tag, f"md_bullet_{level}"))
+                _insert_md_inline(widget, ul_m.group(2), (li_tag,))
+                widget.insert("end", "\n", (li_tag,))
+                last_kind = "list"
+                i += 1
+                continue
+
+            # Ordered list item
+            ol_m = _MD_OL_RE.match(line)
+            if ol_m:
+                indent = len(ol_m.group(1).replace("\t", "  "))
+                level = min(indent // 2, 2)
+                oli_tag = f"md_oli_{level}"
+                widget.insert("end", f"{ol_m.group(2)}. ",
+                              (oli_tag, "md_ol_num"))
+                _insert_md_inline(widget, ol_m.group(3), (oli_tag,))
+                widget.insert("end", "\n", (oli_tag,))
+                last_kind = "list"
+                i += 1
+                continue
+
+            # Regular paragraph line
+            _insert_md_inline(widget, line, ("md_p",))
+            widget.insert("end", "\n", ("md_p",))
+            last_kind = "paragraph"
+            i += 1
+
+        # Remove trailing empty newline(s) if any so bottom padding stays neat
+        while widget.compare("end-2c", ">=", "1.0") and widget.get("end-2c", "end-1c") == "\n":
+            # Keep at least one character if the document isn't empty
+            if widget.get("end-3c", "end-2c") == "\n":
+                widget.delete("end-2c", "end-1c")
+            else:
+                break
+
+        widget.tag_raise("search_match")
+        widget.tag_raise("search_current", "search_match")
+        widget.yview_moveto(0.0)
+    finally:
+        widget.configure(state="disabled")
+
+
+def _copy_result_markdown() -> None:
+    """Copy the raw Markdown source currently rendered in Result to clipboard."""
+    md = current_markdown if current_markdown else report_markdown
+    if not md:
+        return
+    app.clipboard_clear()
+    app.clipboard_append(md)
+    app.update_idletasks()
+    if result_copy_button is not None:
+        result_copy_button.configure(text="Copied!")
+        app.after(
+            1200,
+            lambda: result_copy_button.configure(text="Copy")
+            if result_copy_button is not None and result_copy_button.winfo_exists()
+            else None,
+        )
+
+
 def _build_result_panel(parent) -> None:
-    """Build the flat report text widget with a header search bar and scrollbar."""
-    global textbox, result_search_var, result_search_entry, result_search_status
+    """Build the Markdown-rendered report panel with Copy, search bar and scrollbar."""
+    global textbox, result_copy_button, result_search_var, result_search_entry, result_search_status
     panel = tk.Frame(
         parent,
         background=BG,
@@ -1493,13 +2039,21 @@ def _build_result_panel(parent) -> None:
     panel.rowconfigure(1, weight=1)
     panel.columnconfigure(0, weight=1)
 
-    # Header row: "Result" title on the left, keyword search bar on the far right
+    # Header row: "Result" title on the left, Copy button + keyword search bar on the right
     header = ttk.Frame(panel, style="App.TFrame")
     header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, PAD))
     ttk.Label(header, text="Result", style="Section.TLabel").pack(side="left")
 
     search_bar = ttk.Frame(header, style="App.TFrame")
     search_bar.pack(side="right")
+    result_copy_button = ttk.Button(
+        search_bar,
+        text="Copy",
+        style="Small.TButton",
+        width=7,
+        command=_copy_result_markdown,
+    )
+    result_copy_button.pack(side="left", padx=(0, 8))
     result_search_status = ttk.Label(
         search_bar, text="", style="CardMuted.TLabel", anchor="e"
     )
@@ -1509,7 +2063,7 @@ def _build_result_panel(parent) -> None:
     )
     result_search_var = tk.StringVar(value="")
     result_search_entry = ttk.Entry(
-        search_bar, textvariable=result_search_var, width=30
+        search_bar, textvariable=result_search_var, width=26
     )
     result_search_entry.pack(side="left", padx=(0, 2))
     ttk.Button(
@@ -1545,33 +2099,22 @@ def _build_result_panel(parent) -> None:
                       background=CARD, foreground=FG, insertbackground=ACCENT,
                       borderwidth=0, highlightthickness=1,
                       highlightbackground=BORDER, highlightcolor=ACCENT,
-                      padx=6, pady=4, wrap="none",
-                      font=("Consolas", 10))
+                      padx=12, pady=8, wrap="word",
+                      spacing1=1, spacing2=2, spacing3=1,
+                      font=("Segoe UI", 10))
     textbox.grid(row=1, column=0, sticky="nsew")
-    textbox.tag_configure("search_match", background="#fef08a", foreground=FG)
-    textbox.tag_configure("search_current", background="#f97316", foreground="#ffffff")
-    textbox.tag_raise("search_current", "search_match")
+    _configure_markdown_tags(textbox)
 
     vsb = ttk.Scrollbar(panel, orient="vertical", command=textbox.yview)
     vsb.grid(row=1, column=1, sticky="ns")
-    hsb = ttk.Scrollbar(panel, orient="horizontal", command=textbox.xview)
-    hsb.grid(row=2, column=0, sticky="ew")
-    textbox.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+    textbox.configure(yscrollcommand=vsb.set)
 
-    textbox.delete("0.0", "end")
-    textbox.insert("end", "\n ########################################")
-    textbox.insert("end", "\n #")
-    textbox.insert("end", "\n # PGS - Planetary Gear Sizing Program")
-    textbox.insert("end", "\n # https://github.com/dymaxionkim/PGS")
-    textbox.insert("end", "\n #")
-    textbox.insert("end", "\n ########################################")
-    textbox.insert("end", "\n\n 1. Input Parameters.")
-    textbox.insert("end", "\n 2. Press Run to compute & plot, then Save to write the result files into a folder you choose.")
+    _render_markdown(textbox, WELCOME_MARKDOWN)
 
 
 def build_gui() -> None:
     """Create the themed application window and lay out the widgets."""
-    global app, save_button
+    global app, run_button, save_button
     app = tk.Tk()
     app.title("PGS — Planetary Gear Sizing")
     app.configure(background=BG)
@@ -1691,8 +2234,9 @@ def build_gui() -> None:
     save_button = ttk.Button(bar, text="Save", style="Accent.TButton",
                              command=button_save_callback)
     save_button.pack(side="right", padx=(0, PAD))
-    ttk.Button(bar, text="Run", style="Accent.TButton",
-               command=button_run_callback).pack(side="right", padx=(0, PAD))
+    run_button = ttk.Button(bar, text="Run", style="Accent.TButton",
+                            command=button_run_callback)
+    run_button.pack(side="right", padx=(0, PAD))
     ttk.Button(bar, text="Tip Check", style="TButton",
                command=button_tip_check_callback).pack(side="right", padx=(0, PAD))
     ttk.Button(bar, text="Load", style="Accent.TButton",
@@ -1738,7 +2282,7 @@ def main(argv: list[str] | None = None) -> None:
     read_parameters()
     run_calc()
     if loaded:
-        build_report()
+        _save_and_show_result(DEFAULT_RESULT_DIR)
         plot_pgs()
     app.mainloop()
 

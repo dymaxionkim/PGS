@@ -8,7 +8,8 @@ geometric & kinematic tip-interference checks for simple and Wolfrom-type
 planetary gear sets. The tool is built with Python and provides a ttk-based
 graphical interface with a scrollable parameter sidebar.
 
-* [MANUAL.md](MANUAL.md)
+* [MANUAL.md](MANUAL.md) ([한국어 매뉴얼](MANUAL_KO.md))
+* [한국어 README](README_KO.md)
 
 ## Gear Types
 
@@ -127,7 +128,7 @@ The left sidebar groups the parameters into four vertically scrollable cards (**
 
 ### Run, Tip Check, Load & Save
 
-- **Run** computes the gearbox, fills the result panel and shows the plot preview of the selected Plot option (no files are written). When any active tooth profile fails the kinematic 1-pitch tip interference check, a zoomed worst-phase inspection window automatically opens alongside the preview with interfering points marked in red.
+- **Run** computes the gearbox, saves all output files into the project's `result/` directory (the same files **Save** writes), renders the saved Markdown report (including linked drawings) in the Result panel, and shows the plot preview of the selected Plot option. When any active tooth profile fails the kinematic 1-pitch tip interference check, a zoomed worst-phase inspection window automatically opens alongside the preview with interfering points marked in red.
 - **Tip Check** runs the calculation and opens the zoomed worst-phase tip-interference inspection window on demand for every active profile (`Involute`, `Cycloid`, or both when `All` is selected), even when all checks pass.
 - **Load** asks for a `README.md` file (e.g. a previously saved `Result/README.md`), reads its `## Input Parameters` section, refills the input widgets (ring tooth counts are stored negative in the report and converted back to the positive numbers the fields expect; legacy reports with a single `mu_b` value automatically populate all four bearing inputs), and runs the calculation like **Run**. It is the way to reopen and continue a saved design. The same refill happens automatically at startup when a report path is passed on the command line (`uv run design.py Result/README.md`).
 - **Save** re-runs the calculation, asks which folder to use (directory picker), then creates a `Result` directory inside it and writes every output file — including the `Result/README.md` that **Load** reads back.
@@ -156,7 +157,7 @@ Result/
 ├─ README.md                  ← the same report text shown in the result panel
 ├─ model.csv                  ← full gearbox input-model table
 ├─ Involute_*.png / Cycloid_*.png / All_*.png   ← profile drawings (see below)
-├─ TipCheck_Involute.png / TipCheck_Cycloid.png ← saved when kinematic tip interference fails
+├─ TipCheck_Involute.png / TipCheck_Cycloid.png ← zoomed worst-phase tip-interference check plots
 └─ Gs1/ Gp1/ Gr1/ [Gp2/ Gr2/] ← one folder per exported gear (Gs2 is never exported)
    ├─ Inputs.csv
    ├─ Involute/               ← Inputs.csv + Result.csv + Result.dxf + Result1.png + Result2.png
@@ -186,7 +187,7 @@ Choosing **Cycloid Teeth** generates tooth profiles with epicycloidal/hypocycloi
 
 ### Output
 
-The **Result** panel includes a **keyword search bar** at the far right of its header row (`Search:`, `Ctrl+F` to focus): typing highlights all case-insensitive matches in real time with a match counter (`1/N`), `Enter` / `▼` and `Shift+Enter` / `▲` step through matches with auto-scroll, and `Esc` / `×` clears the search. The panel displays:
+The **Result** panel renders the report as formatted Markdown and includes a **Copy** button (copies the raw Markdown source to the clipboard) and a **keyword search bar** at the far right of its header row (`Search:`, `Ctrl+F` to focus): typing highlights all case-insensitive matches in real time with a match counter (`1/N`), `Enter` / `▼` and `Shift+Enter` / `▲` step through matches with auto-scroll, and `Esc` / `×` clears the search. The panel displays:
 
 - **Ratio** — gear ratios for each stage and total (carrier fixed / ring fixed / 3K type)
 - **Speed** — operating speeds of the input sun (Gs1), carrier, both rings (Gr1, Gr2) and compound planets (Gp1,Gp2) in [rpm], reported for the three lockup configurations of a Wolfrom (Type-3K with ring1 fixed / ring2 fixed with carrier output / carrier fixed with ring2 output) or the two of a Simple (carrier fixed with ring1 output / ring1 fixed with carrier output); each value carries an explicit +/- direction sign relative to the input rotation of Gs1

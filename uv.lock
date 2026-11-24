@@ -419,6 +419,7 @@ dependencies = [
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "openpyxl" },
     { name = "pandas" },
+    { name = "pillow" },
 ]
 
 [package.metadata]
@@ -428,6 +429,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.1" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=3.0.5" },
+    { name = "pillow", specifier = ">=11.3.0" },
 ]
 
 [[package]]
