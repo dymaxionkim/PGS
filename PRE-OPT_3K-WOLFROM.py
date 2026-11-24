@@ -26,13 +26,30 @@ from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
 
-import numpy as np
 import pandas as pd
 
 STANDARD_PRESSURE_ANGLE: float = 20.0
 MIN_RIM_FOR_TRIMMING: float = 16.0
+MIN_EXTERNAL_TEETH: int = 9
+MIN_OPERATING_PRESSURE_ANGLE: float = 10.0
+MAX_OPERATING_PRESSURE_ANGLE: float = 30.0
+MIN_CONTACT_RATIO: float = 1.1
+DEFAULT_ADDENDUM_FACTOR: float = 1.0
+DEFAULT_DEDENDUM_FACTOR: float = 1.25
+DEFAULT_BACKLASH_FACTOR: float = 0.04
+DEFAULT_HOB_TIP_RADIUS_FACTOR: float = 0.2
+DEFAULT_TOOTH_TIP_RADIUS_FACTOR: float = 0.01
+EVAL_SHIFT_CANDIDATES: tuple[float, ...] = (0.0, 0.4)
 ROUND_PRECISION: int = 6
 EXCEL_MAX_ROWS: int = 1048576
+
+_A0_RAD: float = math.radians(STANDARD_PRESSURE_ANGLE)
+_SIN_A0: float = math.sin(_A0_RAD)
+_COS_A0: float = math.cos(_A0_RAD)
+_TAN_A0: float = math.tan(_A0_RAD)
+_INV_A0: float = _TAN_A0 - _A0_RAD
+_COS_MIN_AW: float = math.cos(math.radians(MIN_OPERATING_PRESSURE_ANGLE))
+_COS_MAX_AW: float = math.cos(math.radians(MAX_OPERATING_PRESSURE_ANGLE))
 
 # --- Modern flat colour palette (identical to design.py) -------------------
 BG = "#f0f2f5"           # window background (cool light gray)
@@ -69,10 +86,10 @@ SEARCH_DEFAULTS = {
     "m1_min": 0.8, "m1_max": 0.9, "m1_step": 0.1,
     "m2_min": 1.2, "m2_max": 1.3, "m2_step": 0.1,
     "Np_min": 3, "Np_max": 4,
-    "Zr2_min": 50, "Zr2_max": 55,
-    "Zp2_min": 35, "Zp2_max": 40,
+    "Zr2_min": 50, "Zr2_max": 58,
+    "Zp2_min": 18, "Zp2_max": 24,
     "Zr1_min": 85, "Zr1_max": 95,
-    "Zs1_min": 15, "Zs1_max": 20,
+    "Zs1_min": 12, "Zs1_max": 18,
 }
 
 COLUMNS = ["Np", "m1", "m2", "Zs1", "Zp1", "Zr1", "Zp2", "Zr2",
@@ -89,6 +106,8 @@ CHECK_NAMES = [
     "Trimming Interference 2",
     "Teeth Numbers which is Integer 1",
     "Teeth Numbers which is Integer 2",
+    "Realizable Tooth Range & Profile/Mesh Geometry 1",
+    "Realizable Tooth Range, Pitch-Dia Match & Profile/Mesh Geometry 2",
 ]
 
 
@@ -130,9 +149,8 @@ search_thread: threading.Thread | None = None
 
 # -------------------------------------------------------------- feasibility
 def _involute_thresh(zp: float) -> float:
-    a = np.deg2rad(STANDARD_PRESSURE_ANGLE)
-    temp = (zp * np.sin(a)) ** 2
-    return (temp - 4) / (2 * temp - 4)
+    temp = (zp * _SIN_A0) ** 2
+    return (temp - 4.0) / (2.0 * temp - 4.0)
 
 
 def _non_overlap_ok(planets: int, arg: float) -> bool:
@@ -145,6 +163,167 @@ def _is_int(v: float) -> bool:
     return float(v).is_integer()
 
 
+def _tooth_profile_ok(z_signed: float, shift: float) -> bool:
+    """Return True if GPG produces a non-degenerate, non-twisted tooth.
+
+    Mirrors ``GPG._apply_internal_convention`` and ``GPG._compute_params``
+    in module-independent form (module cancels from every tooth angle):
+    verifies finite involute bounds, positive involute span
+    (``theta_ie > theta_is``), non-pointed / non-self-intersecting outer
+    arc (``alpha_e <= alpha_m``) and non-crossing root arc (``alpha_ts >= 0``).
+    """
+    z = float(z_signed)
+    x = float(shift)
+    b = DEFAULT_BACKLASH_FACTOR
+    a = DEFAULT_ADDENDUM_FACTOR
+    d = DEFAULT_DEDENDUM_FACTOR
+    c = DEFAULT_HOB_TIP_RADIUS_FACTOR
+    e = DEFAULT_TOOTH_TIP_RADIUS_FACTOR
+    if z < 0.0:
+        z = -z
+        x = -x
+        b = -b
+        a, d = d, a
+        c, e = e, c
+    if z <= 0.0:
+        return False
+
+    alpha_m = math.pi / z
+    alpha_is = (
+        _A0_RAD + math.pi / (2.0 * z)
+        + b / (z * _COS_A0)
+        - (1.0 + 2.0 * x / z) * _TAN_A0
+    )
+    theta_is = (
+        _TAN_A0
+        + 2.0 * (c * (1.0 - _SIN_A0) + x - d) / (z * _COS_A0 * _SIN_A0)
+    )
+    u = (z + 2.0 * (x + a - e)) / (z * _COS_A0)
+    if u <= 1.0:
+        return False
+    root_u = math.sqrt(u * u - 1.0)
+    theta_ie = 2.0 * e / (z * _COS_A0) + root_u
+    alpha_e = alpha_is + theta_ie - math.atan(root_u)
+    alpha_ts = (
+        (2.0 * (c * (1.0 - _SIN_A0) - d) * _SIN_A0 + b) / (z * _COS_A0)
+        - 2.0 * c * _COS_A0 / z
+        + math.pi / (2.0 * z)
+    )
+    if not (math.isfinite(alpha_e) and math.isfinite(alpha_ts)
+            and math.isfinite(theta_is) and math.isfinite(theta_ie)):
+        return False
+    return (
+        theta_ie > theta_is
+        and alpha_e <= alpha_m
+        and alpha_ts >= 0.0
+    )
+
+
+def _ext_mesh_ok(z1: int, x1: float, z2: int, x2: float,
+                 dc_norm: float) -> bool:
+    """Check stage-1 external mesh (Gs1-Gp1) pitch match, contact & clearance.
+
+    ``dc_norm = dc / module1`` is dimensionless (module cancels).  Mirrors
+    ``PGS._calc_mesh_loss_ext`` and checks operating pressure angle,
+    tip-to-root clearances and continuous transverse contact ratio.
+    """
+    if dc_norm <= 0.0 or z1 <= 0 or z2 <= 0:
+        return False
+    aw_cd = 0.5 * dc_norm
+    rb1 = 0.5 * z1 * _COS_A0
+    rb2 = 0.5 * z2 * _COS_A0
+    cos_aw = (rb1 + rb2) / aw_cd
+    if not (_COS_MAX_AW <= cos_aw <= _COS_MIN_AW):
+        return False
+
+    a = DEFAULT_ADDENDUM_FACTOR
+    d = DEFAULT_DEDENDUM_FACTOR
+    ra1 = 0.5 * z1 + x1 + a
+    ra2 = 0.5 * z2 + x2 + a
+    rf1 = 0.5 * z1 + x1 - d
+    rf2 = 0.5 * z2 + x2 - d
+    if ra1 <= rb1 or ra2 <= rb2 or rf1 <= 0.0 or rf2 <= 0.0:
+        return False
+    if ra1 + rf2 >= aw_cd or ra2 + rf1 >= aw_cd:
+        return False
+
+    aw = math.acos(cos_aw)
+    tan_aw = math.tan(aw)
+    pb = math.pi * _COS_A0
+    eps1 = (math.sqrt(ra2 * ra2 - rb2 * rb2) - rb2 * tan_aw) / pb
+    eps2 = (math.sqrt(ra1 * ra1 - rb1 * rb1) - rb1 * tan_aw) / pb
+    return (eps1 + eps2) >= MIN_CONTACT_RATIO
+
+
+def _int_mesh_ok(zp: int, xp: float, zr: int, dc_norm: float) -> bool:
+    """Check an internal mesh (Gp-Gr) pitch-diameter match, contact & profile.
+
+    ``dc_norm = dc / module`` is dimensionless.  The operating pitch
+    diameters satisfy ``Dw / (m * Z) = dc_norm / (zr - zp) = cos(a0)/cos(aw)``;
+    requiring ``aw in [MIN_OPERATING_PRESSURE_ANGLE, MAX_OPERATING_PRESSURE_ANGLE]``
+    directly enforces that the actual tooth count stays consistent with the
+    pitch-diameter-derived tooth count ``(dc + m*zp)/m``.  Then computes the
+    exact zero-backlash ring shift ``xr`` (mirroring ``PGS.ring_shift_factor``),
+    verifies ring inner tip > base circle, radial tip-to-root clearances,
+    continuous contact ratio (mirroring ``PGS._calc_mesh_loss_int``) and a
+    non-twisted ring tooth profile.
+    """
+    if dc_norm <= 0.0 or zp <= 0 or zr <= zp:
+        return False
+    aw_cd = 0.5 * dc_norm
+    rbp = 0.5 * zp * _COS_A0
+    rbr = 0.5 * zr * _COS_A0
+    cos_aw = (rbr - rbp) / aw_cd
+    if not (_COS_MAX_AW <= cos_aw <= _COS_MIN_AW):
+        return False
+
+    aw = math.acos(cos_aw)
+    tan_aw = math.tan(aw)
+    inv_aw = tan_aw - aw
+    xr = (zr - zp) * (_INV_A0 - inv_aw) / (2.0 * _TAN_A0) - xp
+
+    a = DEFAULT_ADDENDUM_FACTOR
+    d = DEFAULT_DEDENDUM_FACTOR
+    rap = 0.5 * zp + xp + a
+    rfp = 0.5 * zp + xp - d
+    rar = 0.5 * zr - xr - a
+    rfr = 0.5 * zr - xr + d
+    if rap <= rbp or rar <= rbr or rfp <= 0.0:
+        return False
+    if aw_cd + rap >= rfr or rar <= aw_cd + rfp:
+        return False
+
+    pb = math.pi * _COS_A0
+    eps_p = (math.sqrt(rap * rap - rbp * rbp) - rbp * tan_aw) / pb
+    eps_r = (rbr * tan_aw - math.sqrt(rar * rar - rbr * rbr)) / pb
+    if (eps_p + eps_r) < MIN_CONTACT_RATIO:
+        return False
+    return _tooth_profile_ok(-zr, xr)
+
+
+def _stage1_feasible_shifts(planets: int, zs1: int, zp1: int,
+                            zr1: int) -> tuple[float, ...]:
+    """Return baseline shift values at which stage-1 geometry is realizable."""
+    if zs1 < MIN_EXTERNAL_TEETH or zp1 < MIN_EXTERNAL_TEETH:
+        return ()
+    valid: list[float] = []
+    for x in EVAL_SHIFT_CANDIDATES:
+        dc_norm = zs1 + zp1 + 4.0 * x
+        if dc_norm <= 0.0:
+            continue
+        if not _non_overlap_ok(
+                planets, (zp1 + 2.0 * x + 2.0 * DEFAULT_ADDENDUM_FACTOR) / dc_norm):
+            continue
+        if not (_tooth_profile_ok(zs1, x) and _tooth_profile_ok(zp1, x)):
+            continue
+        if not _ext_mesh_ok(zs1, x, zp1, x, dc_norm):
+            continue
+        if not _int_mesh_ok(zp1, x, zr1, dc_norm):
+            continue
+        valid.append(x)
+    return tuple(valid)
+
+
 def _feasible_matrix(params: SearchParams,
                      report=None) -> list[list]:
     """Return every feasible row of the combination table.
@@ -154,19 +333,21 @@ def _feasible_matrix(params: SearchParams,
     (3K) ratio g22 = (1 + l1)/(1 - l2) with l1 = |Zr1|/Zs1 and
     l2 = |Zr1|*Zp2/(|Zr2|*Zp1), mirroring PGS._calc_stage2.
 
-    The ten checks of ``CHECK_NAMES`` are mirrored from PGS.py: the stage-1
-    conditions use (Zs1, Zp1, Zr1, Np) and the stage-2 conditions use
-    (Zr2, Zp2, Np); every ``... 2`` check deliberately avoids the (virtual)
-    Gs2 gear.  Two pre-pass tables prune the search before the module
-    combos are tested:
+    The twelve checks of ``CHECK_NAMES`` combine the ten geometric checks
+    mirrored from PGS.py (checks 1–10) with stage-1 and stage-2 realizable
+    tooth-range, pitch-diameter match and involute mesh/profile validity
+    filters (checks 11–12):
 
       * stage-1 table: (Np, Zr1, Zs1) combos surviving checks 1, 3, 5, 7, 9
-        with the derived Zp1 = (|Zr1| - Zs1)/2;
-      * stage-2 table: (Np, Zr2, Zp2) combos surviving checks 2, 6, 8, 10.
-
-    The module-dependent Non-Overlap 2 (check 4) is then evaluated on the
-    join of the two tables, using the shared carrier diameter
-    dc = m1 * (Zs1 + Zp1).
+        and 11 with derived Zp1 = (|Zr1| - Zs1)/2, verified for realizable
+        tooth counts, Gs1-Gp1 / Gp1-Gr1 contact ratio, clearances and
+        non-twisted GPG tooth profiles;
+      * stage-2 table: (Np, Zr2, Zp2) combos surviving checks 2, 6, 8, 10
+        and minimum realizable planet tooth count / profile validity;
+      * module join: evaluates Non-Overlap 2 (check 4), non-singular ratio
+        (l2 != 1), and stage-2 pitch-diameter match / operating pressure
+        angle / contact ratio / tip-to-root clearance / non-twisted Gr2
+        tooth profile (check 12) on the shared carrier diameter.
     """
     m1_values = _step_values(params.m1_min, params.m1_max, params.m1_step)
     m2_values = _step_values(params.m2_min, params.m2_max, params.m2_step)
@@ -179,7 +360,8 @@ def _feasible_matrix(params: SearchParams,
 
     if report:
         report("Stage 1 filter : scanning (Np, Zr1, Zs1) teeth combos ...")
-    stage1_ok = []
+    stage1_ok: list[tuple[int, int, int, int, tuple[float, ...]]] = []
+    stage1_cache: dict[tuple[int, int, int, int], tuple[float, ...]] = {}
     total1 = len(np_range) * len(zr1_range) * len(zs1_range)
     done1 = 0
     for planets in np_range:
@@ -189,8 +371,10 @@ def _feasible_matrix(params: SearchParams,
                 if report and done1 % 2000 == 0:
                     report(f"Stage 1 filter : {done1}/{total1} checked"
                            f" · {len(stage1_ok)} candidates")
+                if zs1 < MIN_EXTERNAL_TEETH:
+                    continue
                 diff = zr1 - zs1
-                if diff < 2 or diff % 2 != 0:
+                if diff < 2 * MIN_EXTERNAL_TEETH or diff % 2 != 0:
                     continue
                 zp1 = diff // 2
                 if not _is_int(zp1):
@@ -203,16 +387,26 @@ def _feasible_matrix(params: SearchParams,
                     continue
                 if zr1 - zp1 < MIN_RIM_FOR_TRIMMING:
                     continue
-                stage1_ok.append((planets, zr1, zs1, zp1))
+                s1_key = (planets, zs1, zp1, zr1)
+                s1_shifts = stage1_cache.get(s1_key)
+                if s1_shifts is None:
+                    s1_shifts = _stage1_feasible_shifts(planets, zs1, zp1, zr1)
+                    stage1_cache[s1_key] = s1_shifts
+                if not s1_shifts:
+                    continue
+                stage1_ok.append((planets, zr1, zs1, zp1, s1_shifts))
     if report:
         report(f"Stage 1 filter : {len(stage1_ok)} candidate stage-1 sets")
 
-    stage2_by_planets: dict[int, list[tuple[int, int]]] = {}
+    p2_shift_cache: dict[int, frozenset[float]] = {}
+    stage2_by_planets: dict[int, list[tuple[int, int, frozenset[float]]]] = {}
     for planets in np_range:
-        combos = []
+        combos: list[tuple[int, int, frozenset[float]]] = []
         for zr2 in range(params.zr2_min, params.zr2_max + 1):
+            if zr2 % planets != 0:
+                continue
             for zp2 in range(params.zp2_min, params.zp2_max + 1):
-                if zr2 % planets != 0:
+                if zp2 < MIN_EXTERNAL_TEETH:
                     continue
                 if zr2 < _involute_thresh(zp2):
                     continue
@@ -220,37 +414,83 @@ def _feasible_matrix(params: SearchParams,
                     continue
                 if not (_is_int(zr2) and _is_int(zp2)):
                     continue
-                combos.append((zr2, zp2))
+                p2_shifts = p2_shift_cache.get(zp2)
+                if p2_shifts is None:
+                    p2_shifts = frozenset(
+                        x for x in EVAL_SHIFT_CANDIDATES
+                        if _tooth_profile_ok(zp2, x))
+                    p2_shift_cache[zp2] = p2_shifts
+                if not p2_shifts:
+                    continue
+                combos.append((zr2, zp2, p2_shifts))
         stage2_by_planets[planets] = combos
 
-    m1_arr = np.array(m1_values, dtype=float)
-    m2_arr = np.array(m2_values, dtype=float)
-    mask_cache: dict[tuple, list[tuple[float, float]]] = {}
+    # Precompute every (m1, m2, m2/m1) triple once for fast range pruning.
+    mod_triples: list[tuple[float, float, float]] = [
+        (m1v, m2v, m2v / m1v)
+        for m1v in m1_values
+        for m2v in m2_values
+    ]
+    m_ratio_min = min(t[2] for t in mod_triples)
+    m_ratio_max = max(t[2] for t in mod_triples)
+    sin_half_by_np = {
+        planets: math.sin(math.pi / planets) for planets in np_range
+    }
+
+    int2_cache: dict[tuple[int, float, int, float], bool] = {}
     results: list[list] = []
     total_join = len(stage1_ok)
     done_join = 0
-    for planets, zr1, zs1, zp1 in stage1_ok:
+    for planets, zr1, zs1, zp1, s1_shifts in stage1_ok:
         done_join += 1
         if report and done_join % 10000 == 0:
             report(f"Stage 2 join : {done_join}/{total_join} stage-1 sets"
                    f" · {len(results)} feasible")
-        dc_ratio = zs1 + zp1
-        for zr2, zp2 in stage2_by_planets.get(planets, []):
+        dc_base = zs1 + zp1
+        sin_half = sin_half_by_np[planets]
+        for zr2, zp2, p2_shifts in stage2_by_planets.get(planets, []):
+            if zr1 * zp2 == zr2 * zp1:
+                continue
+            z_diff2 = zr2 - zp2
+            # Compute feasible m2/m1 bands per candidate shift x:
+            #   Non-Overlap 2:    m2/m1 < dc_x * sin(pi/Np) / (zp2 + 2*x + 2*A)
+            #   Pitch-Dia / aw2:  dc_x * cos(aw_max)/(cos(a0)*z_diff2)
+            #                     <= m2/m1 <= dc_x * cos(aw_min)/(cos(a0)*z_diff2)
+            bands: list[tuple[float, float, float, float, float]] = []
+            for x in s1_shifts:
+                if x not in p2_shifts:
+                    continue
+                dc_x = dc_base + 4.0 * x
+                lo = (dc_x * _COS_MAX_AW) / (_COS_A0 * z_diff2)
+                hi_aw = (dc_x * _COS_MIN_AW) / (_COS_A0 * z_diff2)
+                hi_no = (dc_x * sin_half) / (
+                    zp2 + 2.0 * x + 2.0 * DEFAULT_ADDENDUM_FACTOR)
+                hi = hi_aw if hi_aw < hi_no else hi_no
+                if lo <= hi and hi >= m_ratio_min and lo <= m_ratio_max:
+                    bands.append((x, dc_x, lo, hi_aw, hi_no))
+            if not bands:
+                continue
+
             ratio = _total_ratio(zr1, zs1, zp1, zr2, zp2)
-            key = (planets, zp2, dc_ratio)
-            pairs = mask_cache.get(key)
-            if pairs is None:
-                sin_half = np.sin(math.pi / planets)
-                coef = (zp2 + 2.0) / dc_ratio
-                mask = (m1_arr[:, None] * sin_half) > (m2_arr[None, :] * coef)
-                pairs = [(float(m1_arr[i]), float(m2_arr[j]))
-                         for i, j in zip(*np.nonzero(mask))]
-                mask_cache[key] = pairs
-            for m1v, m2v in pairs:
-                results.append([planets, m1v, m2v, zs1, zp1, zr1, zp2, zr2,
-                                round(m1v * zr1, ROUND_PRECISION),
-                                round(m2v * zr2, ROUND_PRECISION),
-                                ratio])
+            for m1v, m2v, m_ratio in mod_triples:
+                feasible = False
+                for x, dc_x, lo, hi_aw, hi_no in bands:
+                    if not (lo <= m_ratio <= hi_aw and m_ratio < hi_no):
+                        continue
+                    dc_norm2 = dc_x / m_ratio
+                    ckey = (zp2, x, zr2, round(dc_norm2, 9))
+                    ok = int2_cache.get(ckey)
+                    if ok is None:
+                        ok = _int_mesh_ok(zp2, x, zr2, dc_norm2)
+                        int2_cache[ckey] = ok
+                    if ok:
+                        feasible = True
+                        break
+                if feasible:
+                    results.append([planets, m1v, m2v, zs1, zp1, zr1, zp2, zr2,
+                                    round(m1v * zr1, ROUND_PRECISION),
+                                    round(m2v * zr2, ROUND_PRECISION),
+                                    ratio])
     if report:
         report(f"Search finished : {len(results)} feasible combinations")
     return results
@@ -620,7 +860,7 @@ def _build_result_panel(parent) -> None:
 
 
 def _build_checks_panel(parent) -> None:
-    """List the ten feasibility conditions that a combo must pass."""
+    """List the twelve feasibility conditions that a combo must pass."""
     lf = ttk.LabelFrame(parent, text="Feasibility Conditions", padding=PAD)
     lf.grid(sticky="ew", pady=(0, PAD))
     body = "\n".join(

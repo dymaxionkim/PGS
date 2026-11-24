@@ -127,8 +127,8 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 | Input bearing, μb_in | $\mu_{b,\text{in}}$ | `0.002 (Ball)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)` | 입력축(Gs1) 지지 베어링 마찰계수 ($k_{\text{in}} = d_{b,\text{in}}/d_{s1}$) |
 | Planet bearing, μb_p | $\mu_{b,p}$ | `0.002 (Ball/Needle)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (None)` | 유성 핀 베어링 마찰계수 (캐리어 동력 순환 루프 내부, $d_{\text{pin}}/d_p$) |
 | Carrier bearing, μb_c | $\mu_{b,c}$ | `0.002 (Ball)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)` | Wolfrom Type-3K 자유 회전 캐리어 지지 베어링 마찰계수 ($k_c = d_c/(d_{s1}+d_{r1})$; Simple 모드에서는 비활성, Carrier Fixed 시 0, Carrier Output 시 Output 베어링과 통합하여 이중 계상 방지) |
-| Output bearing, μb_out | $\mu_{b,\text{out}}$ | `0.002 (Ball)` (기본), `0.005 (Crossed Roller)`, `0.01 (Preloaded CRB)`, `0.05 (Bushing)`, `0.0 (None)` | 출력축/하우징 베어링 마찰계수 (Ring 출력 시 $k_{\text{out}} = (d_{r,\text{out}}+4m_{\text{out}})/d_{r,\text{out}}$, Carrier 출력 시 $k_{\text{out}} = 0.5(d_{s1}+d_c)/d_c$ 로 1회 적용) |
-| Seal loss, ζs | $\zeta_s$ | `0.01 (Lip seal)` (기본), `0.005 (Low-fric)`, `0.02 (Double-lip)`, `0.0 (None)` | 입·출력 축 실(Seal) 무부하 손실 비율 |
+| Output bearing, μb_out | $\mu_{b,\text{out}}$ | `0.005 (Crossed Roller)` (기본), `0.002 (Ball)`, `0.01 (Preloaded CRB)`, `0.05 (Bushing)`, `0.0 (None)` | 출력축/하우징 베어링 마찰계수 (Ring 출력 시 $k_{\text{out}} = (d_{r,\text{out}}+4m_{\text{out}})/d_{r,\text{out}}$, Carrier 출력 시 $k_{\text{out}} = 0.5(d_{s1}+d_c)/d_c$ 로 1회 적용) |
+| Seal loss, ζs | $\zeta_s$ | `0.0 (None)` (기본), `0.005 (Low-fric)`, `0.01 (Lip seal)`, `0.02 (Double-lip)` | 입·출력 축 실(Seal) 무부하 손실 비율 |
 | Churning coeff, kc | $k_c$ | `0.005 (Grease)` (기본), `0.015 (Oil splash)`, `0.002 (Oil mist)`, `0.0 (None)` | 기준 속도 `1000 rpm`에서의 윤활 교반(Churning) 손실 계수 — 입력 속도 $n_{s1}$ 과 연동 ($\propto (|n_{s1}|/1000)^2$) |
 
 > **GUI 스크롤바 및 Result 검색 안내**: 좌측 입력 패널(`Planetary System` · `Involute Gear Spec` · `Loss Parameters` · `Plot`)은 세로 스크롤바와 마우스 휠 스크롤을 지원하며, 기본 창 높이는 전체 스택 높이의 약 70% 수준으로 컴팩트하게 열립니다. 우측 `Result` 헤더 맨 우측의 **Search 입력창**(`Ctrl+F` 단축키, `Enter`/`Shift+Enter` 또는 `▲`/`▼` 이동, `Esc`/`×` 초기화)으로 출력 리포트 내 키워드를 즉시 검색·하이라이트할 수 있습니다.
@@ -1138,10 +1138,10 @@ uv run PRE-OPT_3K-WOLFROM.py   # 또는 Windows: PRE-OPT_3K-WOLFROM.bat / Linux:
 | Module1, m1 | 0.8 – 0.9 (0.1) |
 | Module2, m2 | 1.2 – 1.3 (0.1) |
 | Planet number, Np | 3 – 4 |
-| Ring2 Teeth, Zr2 | 50 – 55 |
-| Planet2 Teeth, Zp2 | 35 – 40 |
+| Ring2 Teeth, Zr2 | 50 – 58 |
+| Planet2 Teeth, Zp2 | 18 – 24 |
 | Ring1 Teeth, Zr1 | 85 – 95 |
-| Sun1 Teeth, Zs1 | 15 – 20 |
+| Sun1 Teeth, Zs1 | 12 – 18 |
 
 ### 5.2 버튼 동작
 
@@ -1164,13 +1164,13 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 - $D_{r1} = m_1\,|Z_{r1}|$, $D_{r2} = m_2\,|Z_{r2}|$ — 두 링기어 피치원 직경
 - $Ratio$ — Type-3K 전체 감속비 $g_{22}$ (§3.4-c)
 
-탐색은 성능상 두 단계 전처리로 수행한다. 1단($N_p, Z_{r1}, Z_{s1}$) 조합 중 검사 1·3·5·7·9를 통과한 후보를 모으고, 2단($N_p, Z_{r2}, Z_{p2}$) 조합 중 검사 2·6·8·10을 통과한 표를 조인한 뒤, 모듈에 의존하는 Non-Overlap 2(검사 4)를 캐리어 직경 $d_c = m_1(Z_{s1}+Z_{p1})$ 로 판정한다. 결과 [Feasible Combinations] 표의 `Dr1`, `Dr2`, `Ratio`는 `PGS.py`의 기하 결과와 정확히 일치한다.
+탐색은 성능상 두 단계 전처리로 수행한다. 1단($N_p, Z_{r1}, Z_{s1}$) 조합 중 검사 1·3·5·7·9와 1단 실성립 치수·치형/물림 기하 검사(검사 11)를 통과한 후보를 모으고, 2단($N_p, Z_{r2}, Z_{p2}$) 조합 중 검사 2·6·8·10 및 최소 유성 치수·치형 조건을 통과한 표를 조인한다. 조인 단계에서는 모듈에 의존하는 Non-Overlap 2(검사 4), 특이 감속비($l_2 = 1$) 제외, 그리고 공유 캐리어 직경 $d_c$ 기준 2단 피치원-잇수 정합($\alpha'_2 \in [10^\circ, 30^\circ]$)·물림률($\varepsilon_\alpha \ge 1.1$)·이끝-이뿌리 틈새·비꼬임 인볼루트 치형 검사(검사 12)를 판정한다. 결과 [Feasible Combinations] 표의 `Dr1`, `Dr2`, `Ratio`는 `PGS.py`의 기하 결과와 정확히 일치한다.
 
 ---
 
 ## 부록 A. 입력·출력 예시 (기본값: Wolfrom Zr1=90, Zr2=54)
 
-입력: `TYPE=3K-Wolfrom, m1=0.8, m2=1.2, Np=3, Zr1=90, Zr2=54, Zp2=20, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=Gp2.X=0.4, B=0.04, α=20°, μ=0.08 (Grease), μb_in=μb_p=μb_c=μb_out=0.002 (Ball/Needle), ζs=0.01 (Lip seal), kc=0.005 (Grease)`
+입력: `TYPE=3K-Wolfrom, m1=0.8, m2=1.2, Np=3, Zr1=90, Zr2=54, Zp2=20, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=Gp2.X=0.4, B=0.04, α=20°, μ=0.08 (Grease), μb_in=μb_p=μb_c=0.002 (Ball/Needle), μb_out=0.005 (Crossed Roller), ζs=0.0 (None), kc=0.005 (Grease)`
 
 주요 결과 (`Result/README.md`):
 
@@ -1184,10 +1184,10 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 | Speed B (Ring2 고정): Gs1 / Carrier / Gr1 / Planet / Gr2 | +1000 / +102.302 / -17.391 / -173.913 / +0 [rpm] |
 | Speed C (캐리어 고정): Gs1 / Carrier / Gr1 / Planet / Gr2 | +1000 / +0 / -133.333 / -307.692 / -113.96 [rpm] |
 | Mesh Efficiency (Gs1–Gp1 / Gp1–Gr1 / Gp2–Gr2) | 98.42% / 99.73% / 99.50% (Contact Ratio = 1.36 / 1.59 / 1.52) |
-| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.50 m/s`) | Input 0.11% (`k=0.50`) · Pin(M1/M2/M3) 0.08%/0.08%/0.11% · Carrier(3K) 0.11% (`k=0.52`) · Output Ring2 0.23% (`k=1.07`) / Carrier-Out 0.13% (`k=0.61`) · Seal 1.00%, Churning 0.50% |
-| **Efficiency A (Type-3K): 정구동 / 역구동** | **91.06% / 90.71%** (`Good`, `mu_lock = 1.5048` → **`Possible`**) |
-| Efficiency B (Ring2 고정): 정구동 / 역구동 | 96.24% / 96.24% (`Good` → `Possible`) |
-| Efficiency C (캐리어 고정): 정구동 / 역구동 | 95.91% / 95.91% (`Good` → `Possible`) |
+| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.50 m/s`) | Input 0.11% (`k=0.50`) · Pin(M1/M2/M3) 0.08%/0.08%/0.11% · Carrier(3K) 0.11% (`k=0.52`) · Output Ring2 0.57% (`k=1.07`) / Carrier-Out 0.33% (`k=0.61`) · Seal 0.00%, Churning 0.50% |
+| **Efficiency A (Type-3K): 정구동 / 역구동** | **91.74% / 91.39%** (`Good`, `mu_lock = 1.5247` → **`Possible`**) |
+| Efficiency B (Ring2 고정): 정구동 / 역구동 | 97.05% / 97.04% (`Good` → `Possible`) |
+| Efficiency C (캐리어 고정): 정구동 / 역구동 | 96.58% / 96.58% (`Good` → `Possible`) |
 | Zs1 / Zp1 / Zr1 | 12 / 39 / −90 |
 | Zs2 / Zp2 / Zr2 | 15.0667 / 20 / −54 |
 | 캐리어 반경 | 21.04 mm |
@@ -1196,9 +1196,9 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 
 ---
 
-Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B=0.04, α=20°, μ=0.08, μb_in=μb_p=μb_out=0.002, ζs=0.01, kc=0.005`):
+Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B=0.04, α=20°, μ=0.08, μb_in=μb_p=0.002, μb_out=0.005, ζs=0.0, kc=0.005`):
 
-입력: `TYPE=Simple, m1=0.5, Np=3, Zr1=36, Zs1=12, ns1=1000, mu=0.08, mu_b_in=mu_b_p=mu_b_out=0.002, zeta_s=0.01, kc=0.005`
+입력: `TYPE=Simple, m1=0.5, Np=3, Zr1=36, Zs1=12, ns1=1000, mu=0.08, mu_b_in=mu_b_p=0.002, mu_b_out=0.005, zeta_s=0.0, kc=0.005`
 
 | 항목 | 값 |
 |------|-----|
@@ -1209,9 +1209,9 @@ Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B
 | Speed ① (Carrier Fixed, Ring1 Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +0 / −333.333 / −1000 [rpm] |
 | Speed ② (Ring1 Fixed, Carrier Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +250 / +0 / −500 [rpm] |
 | Mesh Efficiency (Gs1–Gp1 / Gp1–Gr1) | 97.83% / 99.26% (Contact Ratio = 1.20 / 1.25) |
-| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.31 m/s`) | Input 0.11% (`k=0.50`) · Pin(M1/M2) 0.05%/0.05% · Output Ring1 0.24% (`k=1.11`) / Carrier-Out 0.16% (`k=0.73`) · Seal 1.00%, Churning 0.50% |
-| Efficiency ① (Carrier Fixed): 정구동 / 역구동 (1·2·3단) | 95.16% / 92.20% / 89.37% (`Good` → `Possible`) |
-| Efficiency ② (Ring1 Fixed): 정구동 / 역구동 (1·2·3단) | 95.99% / 93.76% / 91.61% · 역 95.97% / 93.72% / 91.56% (`Good` → `Possible`) |
+| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.31 m/s`) | Input 0.11% (`k=0.50`) · Pin(M1/M2) 0.05%/0.05% · Output Ring1 0.59% (`k=1.11`) / Carrier-Out 0.39% (`k=0.73`) · Seal 0.00%, Churning 0.50% |
+| Efficiency ① (Carrier Fixed): 정구동 / 역구동 (1·2·3단) | 95.82% / 92.86% / 90.05% (`Good` → `Possible`) |
+| Efficiency ② (Ring1 Fixed): 정구동 / 역구동 (1·2·3단) | 96.76% / 94.53% / 92.39% · 역 96.74% / 94.50% / 92.34% (`Good` → `Possible`) |
 
 > 저장되는 결과 파일은 위 Wolfrom 예시와 마찬가지로 `Result/README.md`, `Involute_*/Cycloid_*/All_*` PNG(Simple은 12개), `Result/Gs1|Gp1|Gr1/` 기어 폴더 구조를 갖는다.
 >

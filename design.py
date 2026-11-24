@@ -84,8 +84,8 @@ DEFAULT_INPUTS = {
     "mu_b_in": 0.002,
     "mu_b_p": 0.002,
     "mu_b_c": 0.002,
-    "mu_b_out": 0.002,
-    "seal": 0.01,
+    "mu_b_out": 0.005,
+    "seal": 0.0,
     "churn": 0.005,
     "PlotOption": 3,
     "TeethType": "Involute Teeth",
@@ -155,17 +155,17 @@ LOSS_PRESETS: dict[str, list[tuple[str, float]]] = {
         ("0.0 (Floating/None)", 0.0),
     ],
     "mu_b_out": [
-        ("0.002 (Ball)", 0.002),
         ("0.005 (Crossed Roller)", 0.005),
+        ("0.002 (Ball)", 0.002),
         ("0.01 (Preloaded CRB)", 0.01),
         ("0.05 (Bushing)", 0.05),
         ("0.0 (None)", 0.0),
     ],
     "seal": [
-        ("0.01 (Lip seal)", 0.01),
-        ("0.005 (Low-fric)", 0.005),
-        ("0.02 (Double-lip)", 0.02),
         ("0.0 (None)", 0.0),
+        ("0.005 (Low-fric)", 0.005),
+        ("0.01 (Lip seal)", 0.01),
+        ("0.02 (Double-lip)", 0.02),
     ],
     "churn": [
         ("0.005 (Grease)", 0.005),
@@ -1500,32 +1500,32 @@ def _build_result_panel(parent) -> None:
 
     search_bar = ttk.Frame(header, style="App.TFrame")
     search_bar.pack(side="right")
+    result_search_status = ttk.Label(
+        search_bar, text="", style="CardMuted.TLabel", anchor="e"
+    )
+    result_search_status.pack(side="left", padx=(0, 6))
     ttk.Label(search_bar, text="Search:", style="CardMuted.TLabel").pack(
         side="left", padx=(0, 4)
     )
     result_search_var = tk.StringVar(value="")
     result_search_entry = ttk.Entry(
-        search_bar, textvariable=result_search_var, width=20
+        search_bar, textvariable=result_search_var, width=30
     )
-    result_search_entry.pack(side="left", padx=(0, 4))
-    result_search_status = ttk.Label(
-        search_bar, text="", style="CardMuted.TLabel", width=6, anchor="e"
-    )
-    result_search_status.pack(side="left", padx=(0, 4))
+    result_search_entry.pack(side="left", padx=(0, 2))
     ttk.Button(
         search_bar,
         text="▲",
         style="Small.TButton",
         width=2,
         command=lambda: _step_result_search(-1),
-    ).pack(side="left", padx=(0, 2))
+    ).pack(side="left", padx=(0, 1))
     ttk.Button(
         search_bar,
         text="▼",
         style="Small.TButton",
         width=2,
         command=lambda: _step_result_search(1),
-    ).pack(side="left", padx=(0, 2))
+    ).pack(side="left", padx=(0, 1))
     ttk.Button(
         search_bar,
         text="×",
@@ -1552,9 +1552,11 @@ def _build_result_panel(parent) -> None:
     textbox.tag_configure("search_current", background="#f97316", foreground="#ffffff")
     textbox.tag_raise("search_current", "search_match")
 
-    sb = ttk.Scrollbar(panel, orient="vertical", command=textbox.yview)
-    sb.grid(row=1, column=1, sticky="ns")
-    textbox.configure(yscrollcommand=sb.set)
+    vsb = ttk.Scrollbar(panel, orient="vertical", command=textbox.yview)
+    vsb.grid(row=1, column=1, sticky="ns")
+    hsb = ttk.Scrollbar(panel, orient="horizontal", command=textbox.xview)
+    hsb.grid(row=2, column=0, sticky="ew")
+    textbox.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
     textbox.delete("0.0", "end")
     textbox.insert("end", "\n ########################################")

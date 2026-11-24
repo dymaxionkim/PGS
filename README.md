@@ -83,8 +83,8 @@ uv run PRE-OPT_3K-WOLFROM.py   # or PRE-OPT_3K-WOLFROM.bat / .sh
 
 ![](img/PRE-OPT_3K-WOLFROM.png)
 
-- **Search Space** — the independent inputs (min/max/step) in the order `Np`, `m1`, `m2`, `Zs1`, `Zr1`, `Zp2`, `Zr2`. Integer parameters step by 1; only the modules have a Step column. Defaults: m1 0.8–0.9 (step 0.1), m2 1.2–1.3 (step 0.1), Np 3–4, Zr2 50–55, Zp2 35–40, Zr1 85–95, Zs1 15–20.
-- **Start** — runs the search and fills the table only: no folder picker and no file is written. It evaluates 10 checks (the stage-1 checks on `(Zs1, Zp1, Zr1, Np)` plus their stage-2 analogue on `(Zr2, Zp2, Np)`, skipping the virtual Gs2), using two pre-pass tables for speed.
+- **Search Space** — the independent inputs (min/max/step) in the order `Np`, `m1`, `m2`, `Zs1`, `Zr1`, `Zp2`, `Zr2`. Integer parameters step by 1; only the modules have a Step column. Defaults: m1 0.8–0.9 (step 0.1), m2 1.2–1.3 (step 0.1), Np 3–4, Zr2 50–58, Zp2 18–24, Zr1 85–95, Zs1 12–18.
+- **Start** — runs the search and fills the table only: no folder picker and no file is written. It evaluates 12 checks (the 10 analytical stage-1/stage-2 checks plus stage-1 and stage-2 realizable tooth-range, shared-carrier pitch-diameter match, operating pressure angle, transverse contact ratio, tip-to-root clearance, and non-twisted involute profile checks, while excluding singular `l2 = 1` ratios), using two pre-pass tables for speed.
 - **Save** (immediately right of Start) — asks for a folder and writes the current table to `Result.xlsx`. Warns when there is nothing to save yet, and refuses to save more rows than the Excel row limit (1 048 576).
 - **PGS** (right of Save) — enabled only when exactly one table row is selected; launches `design.py` with that row's parameters pre-filled (it writes a temporary report and starts `python design.py <report>`).
 - **Table columns** — `Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio`, where `Dr1 = m1·|Zr1|`, `Dr2 = m2·|Zr2|` and `Ratio` is the Type-3K total ratio `g22`. `Zp1 = (|Zr1| − Zs1)/2` follows from the equal-distance condition.
@@ -119,8 +119,8 @@ The left sidebar groups the parameters into four vertically scrollable cards (**
 | Input bearing, μb_in | Input shaft (Gs1) support bearing friction coefficient with geometry-derived factor `k_in = d_in / ds1`; presets `0.002 (Ball)` (default), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)`, or custom |
 | Planet bearing, μb_p | Planet pin bearing friction coefficient inside the carrier power loop (`d_pin / dp`); presets `0.002 (Ball/Needle)` (default), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (None)`, or custom |
 | Carrier bearing, μb_c | Free-rotating carrier bearing friction coefficient for Wolfrom Type-3K (`k_c = dc / (ds1 + dr1)`); disabled in Simple mode, zero when carrier is fixed, and merged into Output Shaft Bearing when carrier is the output; presets `0.002 (Ball)` (default), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)`, or custom |
-| Output bearing, μb_out | Output shaft/housing bearing friction coefficient with geometry-derived factor (`k_out = (dr_out + 4·m_out) / dr_out` for Ring output, `k_out = 0.5·(ds1 + dc) / dc` for Carrier output, applied once without double-counting); presets `0.002 (Ball)` (default), `0.005 (Crossed Roller)`, `0.01 (Preloaded CRB)`, `0.05 (Bushing)`, `0.0 (None)`, or custom |
-| Seal loss, ζs | Load-independent fractional shaft-seal drag loss; presets `0.01 (Lip seal)` (default), `0.005 (Low-fric)`, `0.02 (Double-lip)`, `0.0 (None)`, or custom |
+| Output bearing, μb_out | Output shaft/housing bearing friction coefficient with geometry-derived factor (`k_out = (dr_out + 4·m_out) / dr_out` for Ring output, `k_out = 0.5·(ds1 + dc) / dc` for Carrier output, applied once without double-counting); presets `0.005 (Crossed Roller)` (default), `0.002 (Ball)`, `0.01 (Preloaded CRB)`, `0.05 (Bushing)`, `0.0 (None)`, or custom |
+| Seal loss, ζs | Load-independent fractional shaft-seal drag loss; presets `0.0 (None)` (default), `0.005 (Low-fric)`, `0.01 (Lip seal)`, `0.02 (Double-lip)`, or custom |
 | Churning coeff, kc | Reference churning/windage loss fraction at `1000 rpm`, scaled quadratically with input speed `ns1` as `kc · (|ns1| / 1000)²`; presets `0.005 (Grease)` (default), `0.015 (Oil splash)`, `0.002 (Oil mist)`, `0.0 (None)`, or custom |
 | Plot option | Scope of the interactive preview: `Stage1` / `Stage2` / `Total`, or a single gear: `Gs1`, `Gp1`, `Gr1` (stage 1), `Gp2`, `Gr2` (stage 2) — only the selected layout is drawn. Simple offers the stage-1 options only. The saved images always cover every applicable scope (see "Result files") |
 | Teeth profile | `Involute Teeth` (GPG) / `Cycloid Teeth` (CPG), or **`All`** to overlay both profiles in one plot (involute grey/black, cycloid blue) |
@@ -180,7 +180,9 @@ Choosing **Cycloid Teeth** generates tooth profiles with epicycloidal/hypocycloi
 
 > Limitation: a cycloidal tooth profile requires a whole tooth count. In Wolfrom layouts the stage-2 sun `Zs2` can be fractional (e.g. 15.0667). When **Save** runs, the affected `Cycloid_*` / `All_*` images are skipped with a `WARN` on the console (all involute images, the report and the per-gear FGPG2 results are still written). When previewing with **Run**, `Cycloid Teeth` / `All` raises at profile generation — use `Involute Teeth`, or adjust `Zs1`, `Np`, `Zr1`, `Zr2`, `Zp2` so `Zs2` becomes an integer.
 
-![](./img/PGS_02.png)
+![](./img/PGS_03.png) ![](./img/PGS_02.png)
+
+![](./img/PGS_04.png)
 
 ### Output
 
