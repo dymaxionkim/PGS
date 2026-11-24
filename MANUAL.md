@@ -119,16 +119,19 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 | Hob end radius, C | $C$ | 호브 선단 코너 반경 [mm] (루트 필렛 형상) |
 | Tooth end radius, E | $E$ | 치 끝단 라운딩 반경 [mm] |
 
-**손실 파라미터 ("Loss Parameters" 카드)** — 4개 항목 모두 편집 가능한 콤보박스로 제공되어 프리셋 선택 또는 0 이상 임의 수치 직접 입력이 가능하다(`0` 입력 시 해당 손실 제외):
+**손실 파라미터 ("Loss Parameters" 카드)** — 7개 항목 모두 편집 가능한 콤보박스로 제공되어 프리셋 선택 또는 0 이상 임의 수치 직접 입력이 가능하다(`0` 입력 시 해당 손실 제외; 베어링은 4개 위치별로 분리되며 기하 기반 계수 $k$ 가 자동 적용된다):
 
 | 입력 항목 | 기호 | 프리셋 (기본값) | 의미 |
 |-----------|------|-----------------|------|
 | Friction coeff, μ | $\mu$ | `0.08 (Grease)` (기본), `0.05 (Oil)` | 기어 치면 미끄럼 마찰계수 |
-| Bearing coeff, μb | $\mu_b$ | `0.002 (Ball/Needle)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (None)` | 유성 핀 베어링 및 입·출력 지지 베어링 마찰계수 |
+| Input bearing, μb_in | $\mu_{b,\text{in}}$ | `0.002 (Ball)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)` | 입력축(Gs1) 지지 베어링 마찰계수 ($k_{\text{in}} = d_{b,\text{in}}/d_{s1}$) |
+| Planet bearing, μb_p | $\mu_{b,p}$ | `0.002 (Ball/Needle)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (None)` | 유성 핀 베어링 마찰계수 (캐리어 동력 순환 루프 내부, $d_{\text{pin}}/d_p$) |
+| Carrier bearing, μb_c | $\mu_{b,c}$ | `0.002 (Ball)` (기본), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)` | Wolfrom Type-3K 자유 회전 캐리어 지지 베어링 마찰계수 ($k_c = d_c/(d_{s1}+d_{r1})$; Simple 모드에서는 비활성, Carrier Fixed 시 0, Carrier Output 시 Output 베어링과 통합하여 이중 계상 방지) |
+| Output bearing, μb_out | $\mu_{b,\text{out}}$ | `0.002 (Ball)` (기본), `0.005 (Crossed Roller)`, `0.01 (Preloaded CRB)`, `0.05 (Bushing)`, `0.0 (None)` | 출력축/하우징 베어링 마찰계수 (Ring 출력 시 $k_{\text{out}} = (d_{r,\text{out}}+4m_{\text{out}})/d_{r,\text{out}}$, Carrier 출력 시 $k_{\text{out}} = 0.5(d_{s1}+d_c)/d_c$ 로 1회 적용) |
 | Seal loss, ζs | $\zeta_s$ | `0.01 (Lip seal)` (기본), `0.005 (Low-fric)`, `0.02 (Double-lip)`, `0.0 (None)` | 입·출력 축 실(Seal) 무부하 손실 비율 |
 | Churning coeff, kc | $k_c$ | `0.005 (Grease)` (기본), `0.015 (Oil splash)`, `0.002 (Oil mist)`, `0.0 (None)` | 기준 속도 `1000 rpm`에서의 윤활 교반(Churning) 손실 계수 — 입력 속도 $n_{s1}$ 과 연동 ($\propto (|n_{s1}|/1000)^2$) |
 
-> **GUI 스크롤바 안내**: 좌측 입력 패널(`Planetary System` · `Involute Gear Spec` · `Loss Parameters` · `Plot`)은 세로 스크롤바와 마우스 휠 스크롤을 지원하며, 초기 창 높이는 화면 해상도에 맞춰 자동 조정되어 하단 버튼 바가 잘리지 않는다.
+> **GUI 스크롤바 및 Result 검색 안내**: 좌측 입력 패널(`Planetary System` · `Involute Gear Spec` · `Loss Parameters` · `Plot`)은 세로 스크롤바와 마우스 휠 스크롤을 지원하며, 기본 창 높이는 전체 스택 높이의 약 70% 수준으로 컴팩트하게 열립니다. 우측 `Result` 헤더 맨 우측의 **Search 입력창**(`Ctrl+F` 단축키, `Enter`/`Shift+Enter` 또는 `▲`/`▼` 이동, `Esc`/`×` 초기화)으로 출력 리포트 내 키워드를 즉시 검색·하이라이트할 수 있습니다.
 
 **참고 — 링기어 전위계수($x_{r1}, x_{r2}$)는 입력하지 않는다.**
 두 링기어의 전위계수는 프로그램이 캐리어 반경에서 "플랭크 여유 없는 무백래시 내접 물림"이 되도록 자동 산출한다(§3.5 참조). 입력한 $B$ 는 그 위에 덧붙는 플랭크 여유로 작동한다.
@@ -171,6 +174,7 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 
 > - 입력 파라미터 섹션이 없는 파일을 고르면 경고창이 뜨고 아무것도 바뀌지 않는다. `## Input Parameters` 섹션의 형식은 아래 [Save 결과 파일]의 `Result/README.md` 항목과 동일하다.
 > - 보고서에는 링기어 치수가 음수로 기록되므로(`-90.0`), 불러올 때는 입력창이 기대하는 양수 값(`90.0`)으로 자동 변환된다.
+> - 단일 `mu_b` 항목만 기록된 구버전 `Result/README.md`를 불러올 경우에도 4개 분리 베어링 입력(`mu_b_in`, `mu_b_p`, `mu_b_c`, `mu_b_out`)에 해당 값이 자동 반영되어 하위 호환된다.
 
 **Save**를 누르면 폴더 선택 대화상자가 열리고, 선택한 폴더 아래에 `Result/`를 만들고 **동일 계산을 재실행**하여 모든 산출물을 저장한다 (저장 중에는 Save 버튼이 비활성화되고 완료 후 다시 활성화된다).
 
@@ -188,13 +192,13 @@ uv run PRE-OPT_3K-WOLFROM.py  # 조합 사전 탐색 (§5; Windows: PRE-OPT_3K-W
 
 ### 2.7 Step 6 — 결과 확인 및 반복 수렴
 
-Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
+Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다. 출력량이 길 때는 `Result` 소제목 행 맨 우측의 **키워드 검색 입력창(`Search:`)**을 활용하면 원하는 항목(`Fail`, `Efficiency`, `mu_lock`, `Gr2` 등)을 빠르게 찾을 수 있다(`Ctrl+F` 포커스, 입력 즉시 대소문자 무시 전체 하이라이트 및 매치 카운터 표시, `Enter`/`▼` 다음 이동, `Shift+Enter`/`▲` 이전 이동, `Esc`/`×` 초기화, `Run` 재실행 시 자동 재검색):
 
 - **Check Geometrical Conditions** — 1단 해석적 검사 6종과 선택 프로파일의 **운동학적 1피치 이끝 간섭 검사(`Kinematic Tip Interference [...]`)** 전부가 통과("OK")될 때까지 Step 2~4의 값을 바꾸며 반복한다.
   - 실패 시의 조정 방향 예시: `Equal Distance` 실패 → $Z_{s1}$·$Z_{r1}$·$N_p$ 조합 변경 / `Planets Interference` 실패 → $N_p$ 축소 또는 유성 치수 $Z_{p1}=(|Z_{r1}|-Z_{s1})/2$ 축소 / `Trimming Interference` 실패 → $|Z_{r1}|-Z_{p1} \ge 16$ 가 되도록 링·유성 치수 차 확대 / `Kinematic Tip Interference` 실패 → `Tip Check` 확대 도면의 빨간 간섭 지점을 확인하여 $A, D, C, B$ 또는 잇수·전위를 조정.
 - **Ratio** — 각 단 및 전체 기어비 (§3.4의 정의대로 출력됨)
 - **Speed** — 조립 구성별 운전 속도 (Wolfrom 3종 §3.4-e, Simple 2종 §3.4-f)
-- **Efficiency & Backdrivability** — 4대 손실($\mu, \mu_b, \zeta_s, k_c$, 입력속도 $n_{s1}$) 기준 물림·베어링·기생 손실 내역, 구성별 총 정구동($\eta_F$)·역구동($\eta_R$) 예상 효율, 3단계 상세 역구동 판정(`Good` / `Marginal` / `Self-Locking`, Type-3K의 임계 자가잠금 마찰계수 $\mu_{\text{lock}}$ 포함) 및 최종 2단계 결론(`Possible` / `Not Possible`) (§3.8 참조)
+- **Efficiency & Backdrivability** — 4대 손실($\mu$, 4개 위치별 베어링 $\mu_{b,\text{in}}/\mu_{b,p}/\mu_{b,c}/\mu_{b,\text{out}}$, $\zeta_s$, $k_c$, 입력속도 $n_{s1}$) 기준 물림·베어링(기하 계수 $k$·유효 직경 $d_b$ 포함)·기생 손실 내역, 구성별 총 정구동($\eta_F$)·역구동($\eta_R$) 예상 효율, 3단계 상세 역구동 판정(`Good` / `Marginal` / `Self-Locking`, Type-3K의 임계 자가잠금 마찰계수 $\mu_{\text{lock}}$ 포함) 및 최종 2단계 결론(`Possible` / `Not Possible`) (§3.8 참조)
 - **Size** — 기어들의 피치원 직경과 치수, 캐리어 반경 (Simple은 1단 3개만)
 - **기어별 스펙(### Gs1, Gp1, Gr1, Gp2, Gr2)** — 도면화용 치형 상세 파라미터. 가상 2단 태양기어 `Gs2` 스펙은 보고서에 출력되지 않는다.
 
@@ -204,7 +208,7 @@ Result 패널(및 저장된 `Result/README.md`)에서 아래를 확인한다:
 
 ```
 감속비 요구치 결정 → Type 선택 → (Np, m1, m2, Zs1·Zr1, 그리고 Wolfrom은 Zp2·Zr2, ns1) 입력
-→ 전위·백래시·치형 및 손실 파라미터(μ, μb, ζs, kc) 입력 → Run (계산·프리뷰만)
+→ 전위·백래시·치형 및 손실 파라미터(μ, μb_in/p/c/out, ζs, kc) 입력 → Run (계산·프리뷰만)
 → 자동: 치수 배치 해(Zp1, Zs2), 기어비, 운전속도, 효율·역구동 판별, 링 전위계수, 치형 도면, 1피치 이끝 간섭 검사
 → 기하 검사 6종 + 운동학적 이끝 간섭 검사 통과 여부 확인 (필요 시 Tip Check로 확대 점검) → 미달이면 입력 변경 후 재실행(반복)
 → 전부 OK면 Save → 선택 폴더에 Result/ 생성 (README.md · model.csv · 도면 PNG · 기어별 CSV·FGPG2 산출물)
@@ -861,18 +865,33 @@ H_v = 2 \int_{-\varepsilon_1}^{\varepsilon_2} \frac{|s|}{N(s)}\,ds
 - Wolfrom 2단 내접처럼 링 전위가 커서 물림 구간이 피치점 한쪽으로 치우친 경우나 고물림률($\varepsilon_\alpha > 2$)에서도 구간 적분으로 정확히 계산된다.
 - 기하 검사 미통과 등으로 물림률 산출이 불가능한 비정상 기하에서는 단순 Merritt 근사($H_v = 1.0$)로 안전 폴백하며 출력에 주석(`*fallback Hv=1.0`)을 남긴다.
 
-#### (2) 베어링 · 실 · 입력속도 연동 교반(Churning) 손실
+#### (2) 베어링(4개 위치 분리 · 기하 기반 계수 $k$) · 실 · 입력속도 연동 교반(Churning) 손실
 
-1. **베어링 손실 (부하 의존, $\mu_b$)**
-   - **유성 핀 베어링 (캐리어 순환 루프 내부)**: `model.csv`의 캐리어 핀 직경 규칙 $d_{\text{pin}} = \mathrm{clip}(d_{p,\min} - 10 m_{\min},\; 0.25\,d_{p,\min},\; 0.70\,d_{p,\min})$ 을 사용하여 각 물림의 핀 베어링 손실률을 구하고, 캐리어 좌표계 유효 물림 효율 $\eta_i$ 에 직접 차감한다.
+1. **베어링 손실 (부하 의존, $\mu_{b,\text{in}}, \mu_{b,p}, \mu_{b,c}, \mu_{b,\text{out}}$)**
+   - 베어링 마찰계수를 **Input Shaft / Planet Pin / Carrier / Output Shaft** 4개 그룹으로 독립 입력하며, 각 베어링의 유효 직경 $d_b$ 와 무차원 레버리지 계수 $k$ 는 기어 기하 치수로부터 자동 산출된다.
+   - **유성 핀 베어링 (Planet Pin, $\mu_{b,p}$ — 캐리어 동력 순환 루프 내부)**: `model.csv`의 캐리어 핀 직경 규칙 $d_{\text{pin}} = \mathrm{clip}(d_{p,\min} - 10 m_{\min},\; 0.25\,d_{p,\min},\; 0.70\,d_{p,\min})$ 을 사용하여 각 물림의 핀 베어링 손실률을 구하고, 캐리어 좌표계 유효 물림 효율 $\eta_i$ 에서 직접 차감한다(순환 동력 배율 및 $\mu_{\text{lock}}$ 에 직접 반영).
 
 ```math
-\psi_{b,1} = \psi_{b,2} = \frac{\mu_b}{\cos\alpha_0}\frac{d_{\text{pin}}}{d_{p1}}, \qquad
-\psi_{b,3} = \frac{\mu_b}{\cos\alpha_0}\frac{d_{\text{pin}}}{d_{p2}}, \qquad
+\psi_{b,1} = \psi_{b,2} = \frac{\mu_{b,p}}{\cos\alpha_0}\frac{d_{\text{pin}}}{d_{p1}}, \qquad
+\psi_{b,3} = \frac{\mu_{b,p}}{\cos\alpha_0}\frac{d_{\text{pin}}}{d_{p2}}, \qquad
 \eta_i = \max\!\big(0,\; 1 - \psi_i - \psi_{b,i}\big)
 ```
 
-   - **입·출력 축 지지 베어링 (외부 직렬)**: 2개 지지 축의 베어링 효율을 $\eta_{b,\text{shaft}} = \max\!\left(0,\, 1 - \dfrac{0.5\,\mu_b}{\cos\alpha_0}\right)^2$ 로 반영한다.
+   - **외부 축·캐리어 지지 베어링 ($\mu_{b,\text{in}}, \mu_{b,c}, \mu_{b,\text{out}}$ — 캐리어 루프 외부 직렬)**:
+
+| 베어링 그룹 | 유효 베어링 직경 $d_b$ [mm] | 기하 계수 $k$ | 효율 $\eta_b = \max(0,\, 1 - k\mu_b/\cos\alpha_0)$ |
+|-------------|-----------------------------|---------------|-----------------------------------------------------|
+| Input Shaft ($\mu_{b,\text{in}}$) | $d_{b,\text{in}} = \mathrm{clip}(d_{s1} - 6 m_1,\; 0.35\,d_{s1},\; 0.75\,d_{s1})$ | $k_{\text{in}} = d_{b,\text{in}} / d_{s1}$ | $\eta_{b,\text{in}}$ (모든 구성 활성) |
+| Carrier ($\mu_{b,c}$) | $d_{b,c} = d_c$ | $k_c = \dfrac{d_c}{d_{s1} + d_{r1}} = \dfrac{d_c}{d_{s1}(1 + l_1)}$ | $\eta_{b,c}$ (**Wolfrom Type-3K 자유 회전 캐리어 전용**) |
+| Output Shaft — Ring 출력 ($\mu_{b,\text{out}}$) | $d_{b,\text{out},r} = d_{r,\text{out}} + 4 m_{\text{out}}$ | $k_{\text{out},r} = d_{b,\text{out},r} / d_{r,\text{out}}$ | $\eta_{b,\text{out},r}$ (`Gr2` 또는 `Gr1` 출력 구성) |
+| Output Shaft — Carrier 출력 ($\mu_{b,\text{out}}$) | $d_{b,\text{out},c} = \tfrac{1}{2}(d_{s1} + d_c)$ | $k_{\text{out},c} = d_{b,\text{out},c} / d_c$ | $\eta_{b,\text{out},c}$ (캐리어 출력 구성, **1회만 적용하여 이중 계상 방지**) |
+
+   - **조립(Lockup) 구성별 외부 베어링 효율 $\eta_{b,\text{ext}}$** (Carrier Fixed에서는 캐리어 정지이므로 캐리어 베어링 손실 0, Carrier Output에서는 Output Shaft Bearing만 1회 적용):
+     - Wolfrom **Type-3K** (Carrier Free, Ring2 Output): $\eta_{b,\text{ext,3K}} = \eta_{b,\text{in}}\,\eta_{b,c}\,\eta_{b,\text{out},r}$
+     - Wolfrom **Ring2 Fixed, Carrier Output**: $\eta_{b,\text{ext,R2F}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},c}$
+     - Wolfrom **Carrier Fixed, Ring2 Output**: $\eta_{b,\text{ext,CF}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},r}$
+     - Simple **Carrier Fixed, Ring1 Output**: $\eta_{b,\text{ext,CF}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},r}$
+     - Simple **Ring1 Fixed, Carrier Output**: $\eta_{b,\text{ext,RF}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},c}$
 
 2. **실(Seal) 손실 (무부하 기생 손실, $\zeta_s$)**
    - 하우징 입·출력 축 실의 무부하 마찰 손실 비율 $\zeta_s$ 를 기생 손실로 차감한다.
@@ -915,48 +934,53 @@ $l_2 > 1$ (입력·출력 역방향 회전):
 }
 ```
 
-입·출력 축 베어링과 기생 손실(실·교반)을 포함한 총 효율:
+외부 베어링($\eta_{b,\text{ext,3K}} = \eta_{b,\text{in}}\,\eta_{b,c}\,\eta_{b,\text{out},r}$)과 기생 손실(실·교반)을 포함한 총 효율:
 
 ```math
 \begin{aligned}
-\eta_{F,\text{load}} &= \eta_{b,\text{shaft}}\,\eta_{F,\text{core}}, &
+\eta_{F,\text{load}} &= \eta_{b,\text{ext,3K}}\,\eta_{F,\text{core}}, &
 \eta_F &= \max\!\big(0,\; \eta_{F,\text{load}} - \zeta_{\text{parasitic}}\big),\\[4pt]
-\eta_{R,\text{load}} &= \eta_{b,\text{shaft}}\,\eta_{R,\text{core}}, &
+\eta_{R,\text{load}} &= \eta_{b,\text{ext,3K}}\,\eta_{R,\text{core}}, &
 \eta_R &= \eta_{R,\text{load}} - \zeta_{\text{parasitic}}
 \end{aligned}
 ```
 
-- **자가잠금 조건 (역구동 불가)**: 치면+핀 베어링 순환 손실($\eta_2 \eta_3 \le \min(l_2,\, 1/l_2)$) 또는 기생 손실까지 합산한 총 역구동 효율 $\eta_R \le 0$ 일 때 역구동 불가가 된다.
-- **임계 자가잠금 마찰계수 ($\mu_{\text{lock}}$)**: 현재 입력된 베어링·실·교반 손실 조건을 유지한 상태에서 $\eta_R(\mu) = 0$ 이 되는 치면 마찰계수 $\mu_{\text{lock}}$ 을 수치 해(이분법)로 산출하여 함께 출력한다.
+- **자가잠금 조건 (역구동 불가)**: 치면+유성 핀 베어링 순환 손실($\eta_2 \eta_3 \le \min(l_2,\, 1/l_2)$) 또는 외부 베어링·기생 손실까지 합산한 총 역구동 효율 $\eta_R \le 0$ 일 때 역구동 불가가 된다.
+- **임계 자가잠금 마찰계수 ($\mu_{\text{lock}}$)**: 현재 입력된 4개 베어링·실·교반 손실 조건을 유지한 상태에서 $\eta_R(\mu) = 0$ 이 되는 치면 마찰계수 $\mu_{\text{lock}}$ 을 수치 해(이분법)로 산출하여 함께 출력한다.
 
-**B. Ring2 Fixed, Carrier Output (`g1`)** — 링1이 유휴(무부하)이므로 Mesh 1과 Mesh 3만 거치는 2K-H 감속기($p_B = g_{r2p2}\,g_{p1s} = g_1 - 1$)와 동일하다:
+**B. Ring2 Fixed, Carrier Output (`g1`)** — 링1이 유휴(무부하)이므로 Mesh 1과 Mesh 3만 거치는 2K-H 감속기($p_B = g_{r2p2}\,g_{p1s} = g_1 - 1$)와 동일하며, 캐리어가 출력축이므로 $\eta_{b,\text{ext,R2F}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},c}$ 를 1회만 적용한다:
 
 ```math
-\eta_{F,\text{load}} = \eta_{b,\text{shaft}}\,\frac{1 + \eta_1 \eta_3 (g_1 - 1)}{g_1}, \qquad
-\eta_{R,\text{load}} = \eta_{b,\text{shaft}}\,\frac{\eta_1 \eta_3 g_1}{\eta_1 \eta_3 + (g_1 - 1)}
+\eta_{F,\text{load}} = \eta_{b,\text{ext,R2F}}\,\frac{1 + \eta_1 \eta_3 (g_1 - 1)}{g_1}, \qquad
+\eta_{R,\text{load}} = \eta_{b,\text{ext,R2F}}\,\frac{\eta_1 \eta_3 g_1}{\eta_1 \eta_3 + (g_1 - 1)}
 ```
 
-**C. Carrier Fixed, Ring2 Output (`g2`)** — 단순 직렬 2단 물림(순환 동력 없음):
+**C. Carrier Fixed, Ring2 Output (`g2`)** — 단순 직렬 2단 물림(순환 동력 없음, 캐리어 정지이므로 $\eta_{b,\text{ext,CF}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},r}$):
 
 ```math
-\eta_{F,\text{load}} = \eta_{R,\text{load}} = \eta_{b,\text{shaft}}\,\eta_1 \eta_3
+\eta_{F,\text{load}} = \eta_{R,\text{load}} = \eta_{b,\text{ext,CF}}\,\eta_1 \eta_3
 ```
 
 (B·C 구성 역시 총 효율은 $\eta_{F,\text{load}} - \zeta_{\text{parasitic}}$, $\eta_{R,\text{load}} - \zeta_{\text{parasitic}}$ 로 계산된다.)
 
 #### (4) Simple (2K-H) 구성별 효율 및 다단 직렬 효율
 
-유효 물림 효율 $\eta_0 = \eta_1 \eta_2$, 잇수비 $p = |Z_{r1}|/Z_{s1}$ 에 대해 1단 부하 효율은:
+유효 물림 효율(치면 + 유성 핀 베어링) $\eta_0 = \eta_1 \eta_2$, 잇수비 $p = |Z_{r1}|/Z_{s1}$ 에 대해 단별 코어 효율($\eta_{\text{core}}$)과 외부 축 베어링 효율($\eta_{b,\text{ext}}$)은 다음과 같다:
 
-- **Carrier Fixed, Ring1 Output (`g4`)**: $\eta_{F,\text{load}}^{(1)} = \eta_{R,\text{load}}^{(1)} = \eta_{b,\text{shaft}}\,\eta_0$
-- **Ring1 Fixed, Carrier Output (`g3 = 1 + p`)**:
+- **Carrier Fixed, Ring1 Output (`g4`)**: $\eta_{F,\text{core}} = \eta_{R,\text{core}} = \eta_0$, $\eta_{b,\text{ext,CF}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},r}$ (캐리어 정지 → 캐리어 베어링 손실 0)
+- **Ring1 Fixed, Carrier Output (`g3 = 1 + p`)**: $\eta_{b,\text{ext,RF}} = \eta_{b,\text{in}}\,\eta_{b,\text{out},c}$ (Output 베어링만 1회 적용하여 이중 계상 방지)
 
 ```math
-\eta_{F,\text{load}}^{(1)} = \eta_{b,\text{shaft}}\,\frac{1 + p \eta_0}{1 + p}, \qquad
-\eta_{R,\text{load}}^{(1)} = \eta_{b,\text{shaft}}\,\frac{\eta_0 (1 + p)}{\eta_0 + p}
+\eta_{F,\text{core}} = \frac{1 + p \eta_0}{1 + p}, \qquad
+\eta_{R,\text{core}} = \frac{\eta_0 (1 + p)}{\eta_0 + p}
 ```
 
-동일 단을 $k$ 단($k = 1, 2, 3$) 직렬 연결한 경우 부하 효율은 $(\eta_{\text{load}}^{(1)})^k$, 하우징 실 손실은 1회($\zeta_s$), 후단의 교반 손실은 단 감속비 $i$ 로 줄어든 회전수를 반영하여 $\zeta_{\text{churn}}^{(k)} = \sum_{j=0}^{k-1} \zeta_{\text{churn}}(n_{s1}/|i|^j)$ 로 합산된다.
+동일 단을 $k$ 단($k = 1, 2, 3$) 직렬 연결한 경우 단 내부 코어 효율만 단수만큼 거듭제곱($\eta_{\text{core}}^k$)되고, 하우징 양단 입·출력 축 베어링($\eta_{b,\text{ext}}$)과 실 손실($\zeta_s$)은 전체 감속기에 1회씩만 적용된다. 후단의 교반 손실은 단 감속비 $i$ 로 줄어든 회전수를 반영하여 $\zeta_{\text{churn}}^{(k)} = \sum_{j=0}^{k-1} \zeta_{\text{churn}}(n_{s1}/|i|^j)$ 로 합산된다:
+
+```math
+\eta_F^{(k)} = \max\!\big(0,\; \eta_{b,\text{ext}}\,\eta_{F,\text{core}}^k - \zeta_s - \zeta_{\text{churn}}^{(k)}\big), \qquad
+\eta_R^{(k)} = \eta_{b,\text{ext}}\,\eta_{R,\text{core}}^k - \zeta_s - \zeta_{\text{churn}}^{(k)}
+```
 
 #### (5) 역구동 가능 여부 판별 체계 (3단계 상세 판정 + 2단계 최종 결론)
 
@@ -970,7 +994,8 @@ $l_2 > 1$ (입력·출력 역방향 회전):
 
 #### (6) 손실 프리셋 활용 팁
 
-- 특정 손실 항목을 제외하고 순수 치면 효율만 확인하고 싶다면 `Loss Parameters` 카드에서 `μb`, `ζs`, `kc`를 `0.0 (None)`으로 선택하면 된다.
+- 특정 손실 항목을 제외하고 순수 치면 효율만 확인하고 싶다면 `Loss Parameters` 카드에서 4개 베어링(`μb_in`, `μb_p`, `μb_c`, `μb_out`)과 `ζs`, `kc`를 `0.0 (None)`으로 선택하면 된다.
+- 실제 로봇 감속기 설계 조합 예시: 플로팅 선기어·플로팅 캐리어는 `μb_in = 0.0`, `μb_c = 0.0 (Floating/None)`으로 두고, 유성 핀 부싱(`μb_p = 0.05`) 또는 크로스롤러 출력 베어링(`μb_out = 0.005 ~ 0.01`)을 독립 조합해 효율과 $\mu_{\text{lock}}$ 민감도를 바로 비교할 수 있다.
 - 고속 운전(예: $n_{s1} \ge 3000$ rpm)에서는 교반 손실이 속도의 제곱으로 커지므로, `Oil splash`(`0.015`) 대신 `Oil mist`(`0.002`)나 `Grease`(`0.005`)로 전환했을 때의 효율 차이를 바로 비교할 수 있다.
 
 ### 3.9 운동학적 1피치 이끝 간섭 검증 및 유성기어 위상 정렬 — `interference.py` / `design.py`
@@ -1145,7 +1170,7 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 
 ## 부록 A. 입력·출력 예시 (기본값: Wolfrom Zr1=90, Zr2=54)
 
-입력: `TYPE=3K-Wolfrom, m1=0.8, m2=1.2, Np=3, Zr1=90, Zr2=54, Zp2=20, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=Gp2.X=0.4, B=0.04, α=20°, μ=0.08 (Grease), μb=0.002 (Ball/Needle), ζs=0.01 (Lip seal), kc=0.005 (Grease)`
+입력: `TYPE=3K-Wolfrom, m1=0.8, m2=1.2, Np=3, Zr1=90, Zr2=54, Zp2=20, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=Gp2.X=0.4, B=0.04, α=20°, μ=0.08 (Grease), μb_in=μb_p=μb_c=μb_out=0.002 (Ball/Needle), ζs=0.01 (Lip seal), kc=0.005 (Grease)`
 
 주요 결과 (`Result/README.md`):
 
@@ -1159,10 +1184,10 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 | Speed B (Ring2 고정): Gs1 / Carrier / Gr1 / Planet / Gr2 | +1000 / +102.302 / -17.391 / -173.913 / +0 [rpm] |
 | Speed C (캐리어 고정): Gs1 / Carrier / Gr1 / Planet / Gr2 | +1000 / +0 / -133.333 / -307.692 / -113.96 [rpm] |
 | Mesh Efficiency (Gs1–Gp1 / Gp1–Gr1 / Gp2–Gr2) | 98.42% / 99.73% / 99.50% (Contact Ratio = 1.36 / 1.59 / 1.52) |
-| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.50 m/s`) | Pin(M1/M2/M3) 0.08%/0.08%/0.11%, Shafts 0.21% · Seal 1.00%, Churning 0.50% |
-| **Efficiency A (Type-3K): 정구동 / 역구동** | **91.27% / 90.92%** (`Good`, `mu_lock = 1.5048` → **`Possible`**) |
-| Efficiency B (Ring2 고정): 정구동 / 역구동 | 96.26% / 96.26% (`Good` → `Possible`) |
-| Efficiency C (캐리어 고정): 정구동 / 역구동 | 96.03% / 96.03% (`Good` → `Possible`) |
+| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.50 m/s`) | Input 0.11% (`k=0.50`) · Pin(M1/M2/M3) 0.08%/0.08%/0.11% · Carrier(3K) 0.11% (`k=0.52`) · Output Ring2 0.23% (`k=1.07`) / Carrier-Out 0.13% (`k=0.61`) · Seal 1.00%, Churning 0.50% |
+| **Efficiency A (Type-3K): 정구동 / 역구동** | **91.06% / 90.71%** (`Good`, `mu_lock = 1.5048` → **`Possible`**) |
+| Efficiency B (Ring2 고정): 정구동 / 역구동 | 96.24% / 96.24% (`Good` → `Possible`) |
+| Efficiency C (캐리어 고정): 정구동 / 역구동 | 95.91% / 95.91% (`Good` → `Possible`) |
 | Zs1 / Zp1 / Zr1 | 12 / 39 / −90 |
 | Zs2 / Zp2 / Zr2 | 15.0667 / 20 / −54 |
 | 캐리어 반경 | 21.04 mm |
@@ -1171,9 +1196,9 @@ Np, m1, m2, Zs1, Zp1, Zr1, Zp2, Zr2, Dr1, Dr2, Ratio
 
 ---
 
-Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B=0.04, α=20°, μ=0.08, μb=0.002, ζs=0.01, kc=0.005`):
+Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B=0.04, α=20°, μ=0.08, μb_in=μb_p=μb_out=0.002, ζs=0.01, kc=0.005`):
 
-입력: `TYPE=Simple, m1=0.5, Np=3, Zr1=36, Zs1=12, ns1=1000, mu=0.08, mu_b=0.002, zeta_s=0.01, kc=0.005`
+입력: `TYPE=Simple, m1=0.5, Np=3, Zr1=36, Zs1=12, ns1=1000, mu=0.08, mu_b_in=mu_b_p=mu_b_out=0.002, zeta_s=0.01, kc=0.005`
 
 | 항목 | 값 |
 |------|-----|
@@ -1184,9 +1209,9 @@ Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B
 | Speed ① (Carrier Fixed, Ring1 Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +0 / −333.333 / −1000 [rpm] |
 | Speed ② (Ring1 Fixed, Carrier Output): Gs1 / Carrier / Gr1 / Gp1 | +1000 / +250 / +0 / −500 [rpm] |
 | Mesh Efficiency (Gs1–Gp1 / Gp1–Gr1) | 97.83% / 99.26% (Contact Ratio = 1.20 / 1.25) |
-| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.31 m/s`) | Pin(M1/M2) 0.05%/0.05%, Shafts 0.21% · Seal 1.00%, Churning 0.50% |
-| Efficiency ① (Carrier Fixed): 정구동 / 역구동 (1·2·3단) | 95.29% / 92.12% / 89.10% (`Good` → `Possible`) |
-| Efficiency ② (Ring1 Fixed): 정구동 / 역구동 (1·2·3단) | 96.04% / 93.60% / 91.26% · 역 96.02% / 93.57% / 91.21% (`Good` → `Possible`) |
+| Bearing / Parasitic Losses (`ns1=1000 rpm`, `vt_s1=0.31 m/s`) | Input 0.11% (`k=0.50`) · Pin(M1/M2) 0.05%/0.05% · Output Ring1 0.24% (`k=1.11`) / Carrier-Out 0.16% (`k=0.73`) · Seal 1.00%, Churning 0.50% |
+| Efficiency ① (Carrier Fixed): 정구동 / 역구동 (1·2·3단) | 95.16% / 92.20% / 89.37% (`Good` → `Possible`) |
+| Efficiency ② (Ring1 Fixed): 정구동 / 역구동 (1·2·3단) | 95.99% / 93.76% / 91.61% · 역 95.97% / 93.72% / 91.56% (`Good` → `Possible`) |
 
 > 저장되는 결과 파일은 위 Wolfrom 예시와 마찬가지로 `Result/README.md`, `Involute_*/Cycloid_*/All_*` PNG(Simple은 12개), `Result/Gs1|Gp1|Gr1/` 기어 폴더 구조를 갖는다.
 >
@@ -1203,5 +1228,5 @@ Simple 예시 (수동 입력: `Zr1=36, Zs1=12, ns1=1000[rpm], Gs1.X=Gp1.X=0.4, B
     로그를 남기고 **해당 Cycloid/All 도면만 건너뛴다.** 인볼루트 도면·보고서·기어별 CSV/DXF/FGPG2 결과는 모두 정상 저장되며, 기어별 `Involute/`, `Cycloid/` 폴더의 FGPG2 산출물은 실패와 무관하게 두 프로파일 모두 생성된다.
   - **Run(프리뷰)** 경로: `Cycloid Teeth` 또는 `All`을 선택한 상태에서 CPG 점군 생성 단계의 오류는 예외로 이어져 콘솔에 출력된다. 이때는 `Involute Teeth`를 쓰거나, $Z_{s1}$, $N_p$, $Z_{r2}$ 등을 바꿔 $Z_{s2}$ 가 정수가 되도록 조정해야 한다.
 - 기하 검사 6종(§3.6)과 효율·역구동 판별(§3.8)은 인볼루트 치면 기하에 기반하므로, 사이클로이드 치형을 선택한 경우에는 참고용 추정치로 활용한다.
-- 효율 계산은 치면 물림($\mu$), 유성 핀·축 지지 베어링($\mu_b$), 실($\zeta_s$), 입력속도 $n_{s1}$ 연동 교반($k_c$)의 4대 손실을 정격 부하 비율 기반으로 추정한다. 부분 부하(경부하)에서는 무부하 기생 손실(실·교반)의 상대 비중이 커질 수 있으며, 역구동 판정이 `Marginal`($0\% < \eta_R < 20\%$)인 조합은 여유 마찰계수($\mu_{\text{lock}}$)와 실물 시험을 함께 검토해야 한다.
+- 효율 계산은 치면 물림($\mu$), 4개 위치 분리 베어링($\mu_{b,\text{in}}, \mu_{b,p}, \mu_{b,c}, \mu_{b,\text{out}}$), 실($\zeta_s$), 입력속도 $n_{s1}$ 연동 교반($k_c$)의 4대 손실을 정격 부하 비율 기반으로 추정한다. 부분 부하(경부하)에서는 무부하 기생 손실(실·교반)의 상대 비중이 커질 수 있으며, 역구동 판정이 `Marginal`($0\% < \eta_R < 20\%$)인 조합은 여유 마찰계수($\mu_{\text{lock}}$)와 실물 시험을 함께 검토해야 한다.
 - 기어비는 소수 6자리로 반올림되어 출력된다.

@@ -76,6 +76,13 @@ def _entry_values(report_values: dict[str, str]) -> dict[str, str]:
     the positive count ("90.0").
     """
     values: dict[str, str] = {}
+    # Backward compatibility: legacy reports carry a single ``mu_b`` key;
+    # apply it to any separated bearing field not explicitly present.
+    legacy_mu_b = report_values.get("mu_b")
+    if legacy_mu_b is not None:
+        for bkey in design.BEARING_ENTRY_KEYS:
+            if bkey not in report_values:
+                values[bkey] = legacy_mu_b
     for report_key, entry_key in design.REPORT_KEY_TO_ENTRY.items():
         value = report_values.get(report_key)
         if value is None:

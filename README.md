@@ -91,7 +91,7 @@ uv run PRE-OPT_3K-WOLFROM.py   # or PRE-OPT_3K-WOLFROM.bat / .sh
 
 ### Input Parameters
 
-The left sidebar groups the parameters into four vertically scrollable cards (**Planetary System**, **Involute Gear Spec**, **Loss Parameters**, and **Plot**) with mouse-wheel support, so every input remains reachable at any window height.
+The left sidebar groups the parameters into four vertically scrollable cards (**Planetary System**, **Involute Gear Spec**, **Loss Parameters**, and **Plot**) with mouse-wheel support. The GUI opens at a compact default height (~70% of the full stacked height) while keeping every input reachable via scrolling.
 
 ![](./img/PGS_01.png)
 
@@ -116,7 +116,10 @@ The left sidebar groups the parameters into four vertically scrollable cards (**
 | Hob end radius, C | Radius of hob tip [mm] |
 | Tooth end radius, E | Radius of tooth tip [mm] |
 | Friction coeff, μ | Tooth-mesh sliding friction coefficient; editable combobox with presets `0.08 (Grease)` (default) and `0.05 (Oil)`, or any custom non-negative number |
-| Bearing coeff, μb | Bearing friction coefficient applied to planet pin bearings (inside the carrier power loop) and input/output shaft support bearings; presets `0.002 (Ball/Needle)` (default), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (None)`, or custom |
+| Input bearing, μb_in | Input shaft (Gs1) support bearing friction coefficient with geometry-derived factor `k_in = d_in / ds1`; presets `0.002 (Ball)` (default), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)`, or custom |
+| Planet bearing, μb_p | Planet pin bearing friction coefficient inside the carrier power loop (`d_pin / dp`); presets `0.002 (Ball/Needle)` (default), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (None)`, or custom |
+| Carrier bearing, μb_c | Free-rotating carrier bearing friction coefficient for Wolfrom Type-3K (`k_c = dc / (ds1 + dr1)`); disabled in Simple mode, zero when carrier is fixed, and merged into Output Shaft Bearing when carrier is the output; presets `0.002 (Ball)` (default), `0.005 (Roller)`, `0.05 (Bushing)`, `0.0 (Floating/None)`, or custom |
+| Output bearing, μb_out | Output shaft/housing bearing friction coefficient with geometry-derived factor (`k_out = (dr_out + 4·m_out) / dr_out` for Ring output, `k_out = 0.5·(ds1 + dc) / dc` for Carrier output, applied once without double-counting); presets `0.002 (Ball)` (default), `0.005 (Crossed Roller)`, `0.01 (Preloaded CRB)`, `0.05 (Bushing)`, `0.0 (None)`, or custom |
 | Seal loss, ζs | Load-independent fractional shaft-seal drag loss; presets `0.01 (Lip seal)` (default), `0.005 (Low-fric)`, `0.02 (Double-lip)`, `0.0 (None)`, or custom |
 | Churning coeff, kc | Reference churning/windage loss fraction at `1000 rpm`, scaled quadratically with input speed `ns1` as `kc · (|ns1| / 1000)²`; presets `0.005 (Grease)` (default), `0.015 (Oil splash)`, `0.002 (Oil mist)`, `0.0 (None)`, or custom |
 | Plot option | Scope of the interactive preview: `Stage1` / `Stage2` / `Total`, or a single gear: `Gs1`, `Gp1`, `Gr1` (stage 1), `Gp2`, `Gr2` (stage 2) — only the selected layout is drawn. Simple offers the stage-1 options only. The saved images always cover every applicable scope (see "Result files") |
@@ -126,7 +129,7 @@ The left sidebar groups the parameters into four vertically scrollable cards (**
 
 - **Run** computes the gearbox, fills the result panel and shows the plot preview of the selected Plot option (no files are written). When any active tooth profile fails the kinematic 1-pitch tip interference check, a zoomed worst-phase inspection window automatically opens alongside the preview with interfering points marked in red.
 - **Tip Check** runs the calculation and opens the zoomed worst-phase tip-interference inspection window on demand for every active profile (`Involute`, `Cycloid`, or both when `All` is selected), even when all checks pass.
-- **Load** asks for a `README.md` file (e.g. a previously saved `Result/README.md`), reads its `## Input Parameters` section, refills the input widgets (ring tooth counts are stored negative in the report and converted back to the positive numbers the fields expect), and runs the calculation like **Run**. It is the way to reopen and continue a saved design. The same refill happens automatically at startup when a report path is passed on the command line (`uv run design.py Result/README.md`).
+- **Load** asks for a `README.md` file (e.g. a previously saved `Result/README.md`), reads its `## Input Parameters` section, refills the input widgets (ring tooth counts are stored negative in the report and converted back to the positive numbers the fields expect; legacy reports with a single `mu_b` value automatically populate all four bearing inputs), and runs the calculation like **Run**. It is the way to reopen and continue a saved design. The same refill happens automatically at startup when a report path is passed on the command line (`uv run design.py Result/README.md`).
 - **Save** re-runs the calculation, asks which folder to use (directory picker), then creates a `Result` directory inside it and writes every output file — including the `Result/README.md` that **Load** reads back.
 
 ### Command line (headless)
@@ -181,13 +184,13 @@ Choosing **Cycloid Teeth** generates tooth profiles with epicycloidal/hypocycloi
 
 ### Output
 
-The result panel displays:
+The **Result** panel includes a **keyword search bar** at the far right of its header row (`Search:`, `Ctrl+F` to focus): typing highlights all case-insensitive matches in real time with a match counter (`1/N`), `Enter` / `▼` and `Shift+Enter` / `▲` step through matches with auto-scroll, and `Esc` / `×` clears the search. The panel displays:
 
 - **Ratio** — gear ratios for each stage and total (carrier fixed / ring fixed / 3K type)
 - **Speed** — operating speeds of the input sun (Gs1), carrier, both rings (Gr1, Gr2) and compound planets (Gp1,Gp2) in [rpm], reported for the three lockup configurations of a Wolfrom (Type-3K with ring1 fixed / ring2 fixed with carrier output / carrier fixed with ring2 output) or the two of a Simple (carrier fixed with ring1 output / ring1 fixed with carrier output); each value carries an explicit +/- direction sign relative to the input rotation of Gs1
 - **Efficiency & Backdrivability** — estimated total gearbox efficiency and backdrivability printed to both stdout and the Result report (and saved to `Result/README.md`) for every lockup configuration (plus 1-/2-/3-stage cascaded efficiencies for Simple), combining **tooth-mesh, bearing, seal, and speed-dependent churning losses**:
   - **Mesh Efficiency & Contact Ratio** — per-mesh sliding efficiency (`Gs1-Gp1`, `Gp1-Gr1`, and `Gp2-Gr2` for Wolfrom) computed from the involute tooth geometry, operating pressure angle, transverse contact ratio, and mesh friction coefficient `μ`
-  - **Bearing Loss** — load-dependent planet-pin bearing loss inside the carrier power-circulation loop (using carrier pin diameter `d_pin`) plus input/output shaft support bearing efficiency from `μb`
+  - **Bearing Loss** — four separated bearing groups with geometry-derived leverage factors `k`: **Input Shaft** (`μb_in`), **Planet Pin** (`μb_p`, inside the carrier power-circulation loop), **Carrier** (`μb_c`, active only for Wolfrom Type-3K free-rotating carrier), and **Output Shaft** (`μb_out`, Ring output vs. Carrier output applied once without double-counting)
   - **Parasitic Losses (Seal & Churning)** — load-independent seal loss `ζs` plus speed-dependent churning loss `kc · (|ns1| / 1000)²` tied directly to the input speed `ns1` (with reference sun pitch-line speed `vt_s1` [m/s]; downstream stages in multi-stage Simple sets scale churning down by `1 / ratio²` per stage)
   - **Forward / Reverse Efficiency** — total forward ($\eta_F$) and backdriving ($\eta_R$) efficiencies [%] with `Mesh+Bearing` and `Parasitic` breakdown, capturing recirculating-power losses in Type-3K Wolfrom sets
   - **Backdrivability Assessment (3-Tier)** — detailed engineering grade: `Good` ($\eta_R \ge 20\%$, smoothly backdrivable), `Marginal` ($0\% < \eta_R < 20\%$, theoretically backdrivable but sensitive to static friction and drag variation), or `Self-Locking` ($\eta_R \le 0\%$, non-backdrivable under combined losses), together with the critical self-locking mesh friction coefficient `μ_lock` for Type-3K Wolfrom (accounting for bearing, seal, and churning losses)

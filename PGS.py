@@ -22,6 +22,10 @@ MIN_RIM_FOR_TRIMMING: float = 16.0
 ROUND_PRECISION: int = 6
 DEFAULT_FRICTION_COEFF: float = 0.08
 DEFAULT_BEARING_COEFF: float = 0.002
+DEFAULT_BEARING_COEFF_INPUT: float = DEFAULT_BEARING_COEFF
+DEFAULT_BEARING_COEFF_PLANET: float = DEFAULT_BEARING_COEFF
+DEFAULT_BEARING_COEFF_CARRIER: float = DEFAULT_BEARING_COEFF
+DEFAULT_BEARING_COEFF_OUTPUT: float = DEFAULT_BEARING_COEFF
 DEFAULT_SEAL_LOSS: float = 0.01
 DEFAULT_CHURNING_COEFF: float = 0.005
 CHURNING_REF_SPEED_RPM: float = 1000.0
@@ -43,10 +47,31 @@ class MeshLossInfo:
 class LossBreakdown:
     """Bearing, seal and speed-dependent churning loss breakdown."""
 
+    # Geometry-derived effective bearing pitch/bore diameters [mm]
+    input_dia: float = 0.0
     pin_dia: float = 0.0
+    carrier_dia: float = 0.0
+    output_ring_dia: float = 0.0
+    output_carrier_dia: float = 0.0
+    # Geometry-derived dimensionless bearing leverage factors k
+    k_input: float = 0.0
+    k_carrier: float = 0.0
+    k_output_ring: float = 0.0
+    k_output_carrier: float = 0.0
+    # Per-bearing load-dependent loss fractions
+    bearing_input: float = 0.0
     bearing_mesh1: float = 0.0
     bearing_mesh2: float = 0.0
     bearing_mesh3: float = 0.0
+    bearing_carrier: float = 0.0
+    bearing_output_ring: float = 0.0
+    bearing_output_carrier: float = 0.0
+    # External (outside carrier power loop) bearing efficiencies
+    bearing_input_eff: float = 1.0
+    bearing_carrier_eff: float = 1.0
+    bearing_output_ring_eff: float = 1.0
+    bearing_output_carrier_eff: float = 1.0
+    # Combined external efficiency for the primary configuration (compat)
     bearing_shaft_eff: float = 1.0
     seal_loss: float = 0.0
     churning_loss: float = 0.0
@@ -297,7 +322,10 @@ class PGS:
         self.shift_p2: float = 0.0
         self.addendum_factor: float = 1.0
         self.friction_coeff: float = DEFAULT_FRICTION_COEFF
-        self.bearing_coeff: float = DEFAULT_BEARING_COEFF
+        self.bearing_coeff_input: float = DEFAULT_BEARING_COEFF_INPUT
+        self.bearing_coeff_planet: float = DEFAULT_BEARING_COEFF_PLANET
+        self.bearing_coeff_carrier: float = DEFAULT_BEARING_COEFF_CARRIER
+        self.bearing_coeff_output: float = DEFAULT_BEARING_COEFF_OUTPUT
         self.seal_loss: float = DEFAULT_SEAL_LOSS
         self.churning_coeff: float = DEFAULT_CHURNING_COEFF
         self.ns1: float = 1000.0
@@ -360,6 +388,20 @@ class PGS:
     def is_wolfrom(self) -> bool:
         """Whether this design is a Wolfrom (two-stage) gear set."""
         return self.gear_type != 0
+
+    @property
+    def bearing_coeff(self) -> float:
+        """Backward-compatible alias returning the planet bearing coeff."""
+        return self.bearing_coeff_planet
+
+    @bearing_coeff.setter
+    def bearing_coeff(self, value: float) -> None:
+        """Set all four bearing friction coefficients uniformly."""
+        v = float(value)
+        self.bearing_coeff_input = v
+        self.bearing_coeff_planet = v
+        self.bearing_coeff_carrier = v
+        self.bearing_coeff_output = v
 
     # ------------------------------------------------------------------ calc
     def calc(self) -> None:
@@ -648,25 +690,59 @@ class PGS:
         return float(0.5 * (lo + hi))
 
     def _calc_loss_breakdown(self) -> LossBreakdown:
-        """Compute bearing, seal and speed-dependent churning loss terms.
+        """Compute separated bearing, seal and speed-dependent churning losses.
 
-        - Bearing loss (load-dependent):
-          * Planet pin bearings resist planet rotation inside the carrier
-            frame with loss fraction ``psi_b = (mu_b / cos(alpha0)) * (d_pin / dp)``
-            per mesh, where ``d_pin`` follows the carrier-pin sizing rule
-            ``dp_min - 10*m_min`` clamped to ``[0.25, 0.70] * dp_min``.
-          * Input and output shaft support bearings contribute an external
-            efficiency factor ``eta_b_shaft = max(0, 1 - 0.5*mu_b/cos(alpha0))**2``.
+        Bearing losses are separated into four independent bearing groups whose
+        dimensionless leverage factors ``k`` are derived from the gear geometry:
+
+        - **Input Shaft Bearing** (``bearing_coeff_input``):
+          ``d_in = clip(ds1 - 6*m1, 0.35*ds1, 0.75*ds1)``, ``k_in = d_in / ds1``,
+          ``psi_in = (mu_b_in / cos(alpha0)) * k_in``.
+        - **Planet Pin Bearings** (``bearing_coeff_planet``, inside carrier loop):
+          ``d_pin = clip(dp_min - 10*m_min, 0.25*dp_min, 0.70*dp_min)``,
+          ``psi_b1 = psi_b2 = (mu_b_p / cos(alpha0)) * (d_pin / dp1)``,
+          ``psi_b3 = (mu_b_p / cos(alpha0)) * (d_pin / dp2)`` (Wolfrom).
+        - **Carrier Bearing** (``bearing_coeff_carrier``, active only for
+          Wolfrom Type-3K free-rotating carrier; zero when carrier is fixed;
+          merged into Output Shaft Bearing when carrier is the output):
+          ``d_car = dc``, ``k_car = dc / (ds1 + dr1) = (dc / ds1) / (1 + l1)``,
+          ``psi_car = (mu_b_c / cos(alpha0)) * k_car``.
+        - **Output Shaft Bearing** (``bearing_coeff_output``):
+          * Ring output (Gr2 for Wolfrom, Gr1 for Simple):
+            ``d_out_r = dr_out + 4*m_out``, ``k_out_r = d_out_r / dr_out``.
+          * Carrier output (Ring2 Fixed / Simple Ring1 Fixed; applied once
+            without double-counting Carrier Bearing):
+            ``d_out_c = 0.5 * (ds1 + dc)``, ``k_out_c = d_out_c / dc``.
         - Seal loss (load-independent parasitic): ``zeta_s = max(0, seal_loss)``.
         - Churning loss (load-independent, speed-dependent parasitic):
           ``zeta_c = max(0, churning_coeff) * (|ns1| / 1000 rpm)**2``.
         """
-        mu_b = max(0.0, float(self.bearing_coeff))
+        mu_b_in = max(0.0, float(self.bearing_coeff_input))
+        mu_b_p = max(0.0, float(self.bearing_coeff_planet))
+        mu_b_c = max(0.0, float(self.bearing_coeff_carrier))
+        mu_b_out = max(0.0, float(self.bearing_coeff_output))
         seal = max(0.0, float(self.seal_loss))
         kc = max(0.0, float(self.churning_coeff))
         a0 = np.deg2rad(self.pressure_angle)
         cos_a0 = float(np.cos(a0)) if np.cos(a0) > 1e-6 else 1.0
 
+        # 1. Input shaft bearing (Gs1)
+        if self.ds1 > 0.0:
+            input_dia = float(
+                np.clip(
+                    self.ds1 - 6.0 * self.module1,
+                    0.35 * self.ds1,
+                    0.75 * self.ds1,
+                )
+            )
+            k_input = input_dia / self.ds1
+        else:
+            input_dia = 0.0
+            k_input = 0.0
+        psi_b_in = (mu_b_in / cos_a0) * k_input
+        eta_b_in = max(0.0, 1.0 - psi_b_in)
+
+        # 2. Planet pin bearings (inside carrier power loop)
         if self.is_wolfrom and self.dp1 > 0.0 and self.dp2 > 0.0:
             if self.dp1 <= self.dp2:
                 dp_min, m_min = self.dp1, self.module1
@@ -682,15 +758,51 @@ class PGS:
         else:
             pin_dia = 0.0
 
-        psi_b1 = (mu_b / cos_a0) * (pin_dia / self.dp1) if self.dp1 > 0.0 else 0.0
+        psi_b1 = (mu_b_p / cos_a0) * (pin_dia / self.dp1) if self.dp1 > 0.0 else 0.0
         psi_b2 = psi_b1
         psi_b3 = (
-            (mu_b / cos_a0) * (pin_dia / self.dp2)
+            (mu_b_p / cos_a0) * (pin_dia / self.dp2)
             if (self.is_wolfrom and self.dp2 > 0.0)
             else 0.0
         )
-        psi_shaft = 0.5 * (mu_b / cos_a0)
-        eta_b_shaft = max(0.0, 1.0 - psi_shaft) ** 2
+
+        # 3. Carrier bearing (Wolfrom Type-3K free-rotating carrier only)
+        if self.is_wolfrom and self.dc > 0.0 and (self.ds1 + self.dr1) > 0.0:
+            carrier_dia = float(self.dc)
+            k_carrier = carrier_dia / (self.ds1 + self.dr1)
+        else:
+            carrier_dia = 0.0
+            k_carrier = 0.0
+        psi_b_car = (mu_b_c / cos_a0) * k_carrier
+        eta_b_car = max(0.0, 1.0 - psi_b_car)
+
+        # 4. Output shaft bearing (Ring output vs. Carrier output)
+        dr_out, m_out = (
+            (self.dr2, self.module2) if self.is_wolfrom else (self.dr1, self.module1)
+        )
+        if dr_out > 0.0:
+            output_ring_dia = float(dr_out + 4.0 * m_out)
+            k_output_ring = output_ring_dia / dr_out
+        else:
+            output_ring_dia = 0.0
+            k_output_ring = 0.0
+        psi_b_out_ring = (mu_b_out / cos_a0) * k_output_ring
+        eta_b_out_ring = max(0.0, 1.0 - psi_b_out_ring)
+
+        if self.dc > 0.0:
+            output_carrier_dia = float(0.5 * (self.ds1 + self.dc))
+            k_output_carrier = output_carrier_dia / self.dc
+        else:
+            output_carrier_dia = 0.0
+            k_output_carrier = 0.0
+        psi_b_out_car = (mu_b_out / cos_a0) * k_output_carrier
+        eta_b_out_car = max(0.0, 1.0 - psi_b_out_car)
+
+        eta_b_shaft = (
+            eta_b_in * eta_b_car * eta_b_out_ring
+            if self.is_wolfrom
+            else eta_b_in * eta_b_out_car
+        )
 
         speed_ratio = abs(float(self.ns1)) / CHURNING_REF_SPEED_RPM
         churning = kc * (speed_ratio ** 2)
@@ -699,10 +811,26 @@ class PGS:
         )
 
         return LossBreakdown(
+            input_dia=input_dia,
             pin_dia=pin_dia,
+            carrier_dia=carrier_dia,
+            output_ring_dia=output_ring_dia,
+            output_carrier_dia=output_carrier_dia,
+            k_input=k_input,
+            k_carrier=k_carrier,
+            k_output_ring=k_output_ring,
+            k_output_carrier=k_output_carrier,
+            bearing_input=psi_b_in,
             bearing_mesh1=psi_b1,
             bearing_mesh2=psi_b2,
             bearing_mesh3=psi_b3,
+            bearing_carrier=psi_b_car,
+            bearing_output_ring=psi_b_out_ring,
+            bearing_output_carrier=psi_b_out_car,
+            bearing_input_eff=eta_b_in,
+            bearing_carrier_eff=eta_b_car,
+            bearing_output_ring_eff=eta_b_out_ring,
+            bearing_output_carrier_eff=eta_b_out_car,
             bearing_shaft_eff=eta_b_shaft,
             seal_loss=seal,
             churning_loss=churning,
@@ -771,7 +899,17 @@ class PGS:
         e1 = max(0.0, m1.efficiency - lb.bearing_mesh1)
         e2 = max(0.0, m2.efficiency - lb.bearing_mesh2)
         e3 = max(0.0, m3.efficiency - lb.bearing_mesh3)
-        eta_shaft = lb.bearing_shaft_eff
+        # External support bearings per lockup configuration:
+        # - Type-3K (Carrier Free, Ring2 Output): Input + Carrier + Output(Ring2)
+        # - Ring2 Fixed (Carrier Output): Input + Output(Carrier) once (no double-count)
+        # - Carrier Fixed (Ring2 Output): Input + Output(Ring2) (Carrier stationary)
+        eta_ext_3k = (
+            lb.bearing_input_eff
+            * lb.bearing_carrier_eff
+            * lb.bearing_output_ring_eff
+        )
+        eta_ext_r2f = lb.bearing_input_eff * lb.bearing_output_carrier_eff
+        eta_ext_cf = lb.bearing_input_eff * lb.bearing_output_ring_eff
         parasitic = lb.seal_loss + lb.churning_loss
         l1, l2 = self.l1, self.l2
 
@@ -801,15 +939,15 @@ class PGS:
                     eta_r_core = (e1 * (1.0 + l1) / (e1 + e2 * l1)) * (
                         (e2 * e3 * l2 - 1.0) / (l2 - 1.0)
                     )
-            eta_f_load = eta_shaft * eta_f_core
-            eta_r_load = eta_shaft * eta_r_core if eta_r_core > 0.0 else eta_r_core
+            eta_f_load = eta_ext_3k * eta_f_core
+            eta_r_load = eta_ext_3k * eta_r_core if eta_r_core > 0.0 else eta_r_core
             eta_f_tot = max(0.0, eta_f_load - parasitic)
             eta_r_tot = eta_r_load - parasitic
             mu_lock = self._solve_mu_lock_wolfrom(
                 l1, l2,
                 m1.geom_factor_k, m2.geom_factor_k, m3.geom_factor_k,
                 lb.bearing_mesh1, lb.bearing_mesh2, lb.bearing_mesh3,
-                eta_shaft, parasitic,
+                eta_ext_3k, parasitic,
             )
             eff_3k = self._build_eff_result(
                 eta_f_tot, eta_r_tot,
@@ -820,11 +958,12 @@ class PGS:
             )
 
         # Config B: Ring2 Fixed, Carrier Output (Ring1 idling; Mesh 1 + Mesh 3)
+        # Carrier is the output shaft: Output Shaft Bearing applied once (no Carrier Bearing double-counting).
         e13 = e1 * e3
         p_b = self.gr2p2 * self.gp1s
-        eta_f_b_load = eta_shaft * ((1.0 + e13 * p_b) / (1.0 + p_b))
+        eta_f_b_load = eta_ext_r2f * ((1.0 + e13 * p_b) / (1.0 + p_b))
         eta_r_b_load = (
-            eta_shaft * ((e13 * (1.0 + p_b)) / (e13 + p_b))
+            eta_ext_r2f * ((e13 * (1.0 + p_b)) / (e13 + p_b))
             if (e13 + p_b) > 0.0
             else 0.0
         )
@@ -836,8 +975,8 @@ class PGS:
             parasitic=parasitic,
         )
 
-        # Config C: Carrier Fixed, Ring2 Output (simple 2-mesh train)
-        eta_c_load = eta_shaft * e13
+        # Config C: Carrier Fixed, Ring2 Output (simple 2-mesh train; Carrier stationary)
+        eta_c_load = eta_ext_cf * e13
         eff_c = self._build_eff_result(
             max(0.0, eta_c_load - parasitic),
             eta_c_load - parasitic,
@@ -854,15 +993,17 @@ class PGS:
 
     def _simple_stage_efficiencies(
         self,
-        eta_f_stage: float,
-        eta_r_stage: float,
+        eta_f_core: float,
+        eta_r_core: float,
+        eta_ext: float,
         stage_ratio: float,
     ) -> tuple[list[float], list[float]]:
         """Compute 1-, 2- and 3-stage Simple total efficiencies.
 
-        Load-dependent (mesh + bearing) efficiencies multiply per stage,
-        housing seal loss applies once, and each downstream stage's churning
-        loss scales down with ``1 / stage_ratio**(2*j)``.
+        Per-stage core (mesh + planet pin bearing) efficiencies multiply per
+        stage, external input/output shaft bearings and housing seal loss apply
+        once, and each downstream stage's churning loss scales down with
+        ``1 / stage_ratio**(2*j)``.
         """
         lb = self.loss_breakdown
         r = max(1.0, abs(stage_ratio))
@@ -872,8 +1013,8 @@ class PGS:
         for stage in range(1, 4):
             churn_acc += lb.churning_loss / (r ** (2 * (stage - 1)))
             parasitic_k = lb.seal_loss + churn_acc
-            ef_k = max(0.0, (eta_f_stage ** stage) - parasitic_k)
-            er_k = (eta_r_stage ** stage) - parasitic_k
+            ef_k = max(0.0, eta_ext * (eta_f_core ** stage) - parasitic_k)
+            er_k = eta_ext * (eta_r_core ** stage) - parasitic_k
             fwd.append(ef_k)
             rev.append(er_k)
         return fwd, rev
@@ -887,14 +1028,18 @@ class PGS:
         e1 = max(0.0, m1.efficiency - lb.bearing_mesh1)
         e2 = max(0.0, m2.efficiency - lb.bearing_mesh2)
         e0 = e1 * e2
-        eta_shaft = lb.bearing_shaft_eff
+        # External support bearings:
+        # - Carrier Fixed (Ring1 Output): Input + Output(Ring1) (Carrier stationary)
+        # - Ring1 Fixed (Carrier Output): Input + Output(Carrier) once (no double-count)
+        eta_ext_cf = lb.bearing_input_eff * lb.bearing_output_ring_eff
+        eta_ext_rf = lb.bearing_input_eff * lb.bearing_output_carrier_eff
         parasitic = lb.seal_loss + lb.churning_loss
         p = (-self.zr1) / self.zs1 if self.zs1 > 0.0 else 0.0
 
         # Config 1: Carrier Fixed, Ring1 Output (star train)
-        eta_cf_load = eta_shaft * e0
+        eta_cf_load = eta_ext_cf * e0
         cf_fwd, cf_rev = self._simple_stage_efficiencies(
-            eta_cf_load, eta_cf_load, self.g4
+            e0, e0, eta_ext_cf, self.g4
         )
         eff_cf = self._build_eff_result(
             cf_fwd[0], cf_rev[0],
@@ -906,18 +1051,12 @@ class PGS:
         )
 
         # Config 2: Ring1 Fixed, Carrier Output (classic 2K-H reduction)
-        eta_f_rf_load = (
-            eta_shaft * ((1.0 + p * e0) / (1.0 + p))
-            if (1.0 + p) > 0.0
-            else 0.0
-        )
-        eta_r_rf_load = (
-            eta_shaft * ((e0 * (1.0 + p)) / (e0 + p))
-            if (e0 + p) > 0.0
-            else 0.0
-        )
+        eta_f_rf_core = (1.0 + p * e0) / (1.0 + p) if (1.0 + p) > 0.0 else 0.0
+        eta_r_rf_core = (e0 * (1.0 + p)) / (e0 + p) if (e0 + p) > 0.0 else 0.0
+        eta_f_rf_load = eta_ext_rf * eta_f_rf_core
+        eta_r_rf_load = eta_ext_rf * eta_r_rf_core
         rf_fwd, rf_rev = self._simple_stage_efficiencies(
-            eta_f_rf_load, eta_r_rf_load, self.g3
+            eta_f_rf_core, eta_r_rf_core, eta_ext_rf, self.g3
         )
         eff_rf = self._build_eff_result(
             rf_fwd[0], rf_rev[0],
@@ -964,32 +1103,58 @@ class PGS:
 
     def _bearing_summary_text(self) -> str:
         lb = self.loss_breakdown
-        shaft_loss = (1.0 - lb.bearing_shaft_eff) * 100.0
         if self.is_wolfrom:
             return (
-                f"Bearing Loss (d_pin = {lb.pin_dia:.2f} [mm]; "
-                f"Pin M1 / M2 / M3 / Shafts) = "
+                f"Bearing Loss : "
+                f"Input = {lb.bearing_input * 100.0:.2f}% "
+                f"(k={lb.k_input:.2f}, db={lb.input_dia:.2f} [mm]) / "
+                f"Planet Pin (d_pin={lb.pin_dia:.2f} [mm]; M1/M2/M3) = "
                 f"{lb.bearing_mesh1 * 100.0:.2f}% / "
                 f"{lb.bearing_mesh2 * 100.0:.2f}% / "
                 f"{lb.bearing_mesh3 * 100.0:.2f}% / "
-                f"{shaft_loss:.2f}%"
+                f"Carrier (Type-3K) = {lb.bearing_carrier * 100.0:.2f}% "
+                f"(k={lb.k_carrier:.2f}, db={lb.carrier_dia:.2f} [mm]) / "
+                f"Output (Ring2 = {lb.bearing_output_ring * 100.0:.2f}% "
+                f"[k={lb.k_output_ring:.2f}, db={lb.output_ring_dia:.2f} mm]; "
+                f"Carrier-Out = {lb.bearing_output_carrier * 100.0:.2f}% "
+                f"[k={lb.k_output_carrier:.2f}, db={lb.output_carrier_dia:.2f} mm])"
             )
         return (
-            f"Bearing Loss (d_pin = {lb.pin_dia:.2f} [mm]; "
-            f"Pin M1 / M2 / Shafts) = "
+            f"Bearing Loss : "
+            f"Input = {lb.bearing_input * 100.0:.2f}% "
+            f"(k={lb.k_input:.2f}, db={lb.input_dia:.2f} [mm]) / "
+            f"Planet Pin (d_pin={lb.pin_dia:.2f} [mm]; M1/M2) = "
             f"{lb.bearing_mesh1 * 100.0:.2f}% / "
             f"{lb.bearing_mesh2 * 100.0:.2f}% / "
-            f"{shaft_loss:.2f}%"
+            f"Output (Ring1 = {lb.bearing_output_ring * 100.0:.2f}% "
+            f"[k={lb.k_output_ring:.2f}, db={lb.output_ring_dia:.2f} mm]; "
+            f"Carrier-Out = {lb.bearing_output_carrier * 100.0:.2f}% "
+            f"[k={lb.k_output_carrier:.2f}, db={lb.output_carrier_dia:.2f} mm])"
         )
 
     def efficiency_markdown_lines(self) -> list[str]:
         """Compose Markdown lines for the '### Efficiency & Backdrivability' block."""
         lb = self.loss_breakdown
+        if self.is_wolfrom:
+            mu_b_str = (
+                f"mu_b(in/p/c/out) = "
+                f"{self.bearing_coeff_input:g}/"
+                f"{self.bearing_coeff_planet:g}/"
+                f"{self.bearing_coeff_carrier:g}/"
+                f"{self.bearing_coeff_output:g}"
+            )
+        else:
+            mu_b_str = (
+                f"mu_b(in/p/out) = "
+                f"{self.bearing_coeff_input:g}/"
+                f"{self.bearing_coeff_planet:g}/"
+                f"{self.bearing_coeff_output:g}"
+            )
         lines: list[str] = [
             "### Efficiency & Backdrivability (Involute Mesh + Bearing + Seal + Churning)\n",
             (
                 f"* Loss Inputs : mu = {self.friction_coeff:g}, "
-                f"mu_b = {self.bearing_coeff:g}, "
+                f"{mu_b_str}, "
                 f"zeta_s = {self.seal_loss:g}, "
                 f"kc = {self.churning_coeff:g} (@{CHURNING_REF_SPEED_RPM:g} rpm), "
                 f"ns1 = {self.ns1:g} [rpm]\n"

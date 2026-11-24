@@ -32,6 +32,7 @@ from GPG import GPG
 from PGS import PGS, ring_shift_factor
 
 DEFAULT_SCALE = 0.7
+DEFAULT_WINDOW_HEIGHT_RATIO = 0.70
 PLOT_DPI = 100
 PGS_FIGURE = "PGS"
 
@@ -80,7 +81,10 @@ DEFAULT_INPUTS = {
     "C": 0.2,
     "E": 0.01,
     "mu": 0.08,
-    "mu_b": 0.002,
+    "mu_b_in": 0.002,
+    "mu_b_p": 0.002,
+    "mu_b_c": 0.002,
+    "mu_b_out": 0.002,
     "seal": 0.01,
     "churn": 0.005,
     "PlotOption": 3,
@@ -115,10 +119,15 @@ GEAR_INPUTS = [
 
 LOSS_INPUTS = [
     ("mu", "Friction coeff, μ", "or custom", False),
-    ("mu_b", "Bearing coeff, μb", "or custom", False),
+    ("mu_b_in", "Input bearing, μb_in", "or custom", False),
+    ("mu_b_p", "Planet bearing, μb_p", "or custom", False),
+    ("mu_b_c", "Carrier bearing, μb_c", "or custom", False),
+    ("mu_b_out", "Output bearing, μb_out", "or custom", False),
     ("seal", "Seal loss, ζs", "or custom", False),
     ("churn", "Churning coeff, kc", "@1000rpm", False),
 ]
+
+BEARING_ENTRY_KEYS = ("mu_b_in", "mu_b_p", "mu_b_c", "mu_b_out")
 
 # Editable combobox presets for loss parameters (any custom non-negative
 # number may also be typed directly).
@@ -127,9 +136,28 @@ LOSS_PRESETS: dict[str, list[tuple[str, float]]] = {
         ("0.08 (Grease)", 0.08),
         ("0.05 (Oil)", 0.05),
     ],
-    "mu_b": [
+    "mu_b_in": [
+        ("0.002 (Ball)", 0.002),
+        ("0.005 (Roller)", 0.005),
+        ("0.05 (Bushing)", 0.05),
+        ("0.0 (Floating/None)", 0.0),
+    ],
+    "mu_b_p": [
         ("0.002 (Ball/Needle)", 0.002),
         ("0.005 (Roller)", 0.005),
+        ("0.05 (Bushing)", 0.05),
+        ("0.0 (None)", 0.0),
+    ],
+    "mu_b_c": [
+        ("0.002 (Ball)", 0.002),
+        ("0.005 (Roller)", 0.005),
+        ("0.05 (Bushing)", 0.05),
+        ("0.0 (Floating/None)", 0.0),
+    ],
+    "mu_b_out": [
+        ("0.002 (Ball)", 0.002),
+        ("0.005 (Crossed Roller)", 0.005),
+        ("0.01 (Preloaded CRB)", 0.01),
         ("0.05 (Bushing)", 0.05),
         ("0.0 (None)", 0.0),
     ],
@@ -203,6 +231,11 @@ gears: dict[str, GPG | CPG]
 gears_second: dict[str, GPG | CPG] | None = None
 interference_reports: list[interference.ProfileInterferenceReport] = []
 save_button: ttk.Button | None = None
+result_search_var: tk.StringVar | None = None
+result_search_entry: ttk.Entry | None = None
+result_search_status: ttk.Label | None = None
+result_search_matches: list[tuple[str, str]] = []
+result_search_index: int = -1
 
 
 # ---------------------------------------------------------------- parameters
@@ -293,7 +326,20 @@ def read_parameters() -> None:
     P1.shift_p2 = float(entries["Gp2X"].get()) if is_wolfrom else 0.0
     P1.addendum_factor = float(entries["A"].get())
     P1.friction_coeff = _parse_loss_param(entries["mu"].get(), "friction coeff")
-    P1.bearing_coeff = _parse_loss_param(entries["mu_b"].get(), "bearing coeff")
+    P1.bearing_coeff_input = _parse_loss_param(
+        entries["mu_b_in"].get(), "input bearing coeff"
+    )
+    P1.bearing_coeff_planet = _parse_loss_param(
+        entries["mu_b_p"].get(), "planet bearing coeff"
+    )
+    P1.bearing_coeff_carrier = (
+        _parse_loss_param(entries["mu_b_c"].get(), "carrier bearing coeff")
+        if is_wolfrom
+        else 0.0
+    )
+    P1.bearing_coeff_output = _parse_loss_param(
+        entries["mu_b_out"].get(), "output bearing coeff"
+    )
     P1.seal_loss = _parse_loss_param(entries["seal"].get(), "seal loss")
     P1.churning_coeff = _parse_loss_param(entries["churn"].get(), "churning coeff")
     P1.pressure_angle = float(entries["alpha"].get())
@@ -672,7 +718,11 @@ def _append_inputs(lines: list[str]) -> None:
     lines.append("* Radius of Hib End, C = " + str(float(gears["Gs1"].hob_tip_radius_factor)) + "\n")
     lines.append("* Radius of Tooth End, E = " + str(float(gears["Gs1"].tooth_tip_radius_factor)) + "\n")
     lines.append("* Friction Coeff, mu = " + str(float(P1.friction_coeff)) + "\n")
-    lines.append("* Bearing Coeff, mu_b = " + str(float(P1.bearing_coeff)) + "\n")
+    lines.append("* Input Bearing Coeff, mu_b_in = " + str(float(P1.bearing_coeff_input)) + "\n")
+    lines.append("* Planet Bearing Coeff, mu_b_p = " + str(float(P1.bearing_coeff_planet)) + "\n")
+    if P1.is_wolfrom:
+        lines.append("* Carrier Bearing Coeff, mu_b_c = " + str(float(P1.bearing_coeff_carrier)) + "\n")
+    lines.append("* Output Bearing Coeff, mu_b_out = " + str(float(P1.bearing_coeff_output)) + "\n")
     lines.append("* Seal Loss, zeta_s = " + str(float(P1.seal_loss)) + "\n")
     lines.append("* Churning Coeff, kc = " + str(float(P1.churning_coeff)) + "\n\n")
 
@@ -807,6 +857,8 @@ def build_report() -> None:
     _append_gear_specs(lines)
     textbox.delete("0.0", "end")
     textbox.insert("0.0", "".join(lines))
+    if result_search_var is not None:
+        _update_result_search(jump_first=True)
 
 
 # --------------------------------------------------------------- file output
@@ -1019,6 +1071,7 @@ def toggle_simple_fields() -> None:
     state = "disabled" if is_simple else "normal"
     entries["m2"].configure(state=state)
     entries["Gp2X"].configure(state=state)
+    entries["mu_b_c"].configure(state=state)
     plot_cb = entries["PlotOption"]
     if is_simple:
         plot_cb.configure(values=PLOT_OPTIONS_SIMPLE)
@@ -1053,7 +1106,10 @@ REPORT_KEY_TO_ENTRY = {
     "C": "C",
     "E": "E",
     "mu": "mu",
-    "mu_b": "mu_b",
+    "mu_b_in": "mu_b_in",
+    "mu_b_p": "mu_b_p",
+    "mu_b_c": "mu_b_c",
+    "mu_b_out": "mu_b_out",
     "zeta_s": "seal",
     "kc": "churn",
 }
@@ -1091,6 +1147,19 @@ def _apply_report_values(values: dict[str, str]) -> bool:
     positive numbers expected by the input fields.
     """
     applied = False
+    # Backward compatibility: legacy reports carry a single ``mu_b`` key;
+    # apply it to any separated bearing field not explicitly present.
+    legacy_mu_b = values.get("mu_b")
+    if legacy_mu_b is not None:
+        try:
+            legacy_num = _parse_loss_param(legacy_mu_b, "mu_b")
+        except ValueError:
+            legacy_num = None
+        if legacy_num is not None:
+            for bkey in BEARING_ENTRY_KEYS:
+                if bkey not in values and bkey in entries:
+                    entries[bkey].set(_format_loss_option(bkey, legacy_num))
+                    applied = True
     for key, value in values.items():
         entry_key = REPORT_KEY_TO_ENTRY.get(key)
         if entry_key is None or entry_key not in entries:
@@ -1273,6 +1342,11 @@ def _configure_style(style: ttk.Style, title_font, section_font) -> None:
     style.map("TButton",
               background=[("active", NEUTRAL_DARK), ("pressed", NEUTRAL_DARK)])
 
+    style.configure("Small.TButton", background=NEUTRAL, foreground=FG,
+                    borderwidth=0, focusthickness=0, padding=(5, 2))
+    style.map("Small.TButton",
+              background=[("active", NEUTRAL_DARK), ("pressed", NEUTRAL_DARK)])
+
     style.configure("Accent.TButton", background=ACCENT, foreground="white",
                     borderwidth=0, focusthickness=0, padding=(14, 4))
     style.map("Accent.TButton",
@@ -1325,23 +1399,161 @@ def _build_section(parent, title, fields) -> None:
         row = _build_field(lf, row, key, label_text, hint_text, hint_below)
 
 
-def _build_result_panel(parent) -> None:
-    """Build the flat report text widget with a scrollbar."""
-    global textbox
-    lf = ttk.LabelFrame(parent, text="Result", padding=PAD)
-    lf.grid(sticky="nsew")
-    lf.rowconfigure(0, weight=1)
-    lf.columnconfigure(0, weight=1)
+def _apply_current_search_highlight() -> None:
+    """Highlight the active search match and scroll it into view."""
+    if not hasattr(textbox, "tag_remove"):
+        return
+    textbox.tag_remove("search_current", "1.0", "end")
+    if 0 <= result_search_index < len(result_search_matches):
+        start, end = result_search_matches[result_search_index]
+        textbox.tag_add("search_current", start, end)
+        textbox.see(start)
+        if result_search_status is not None:
+            result_search_status.configure(
+                text=f"{result_search_index + 1}/{len(result_search_matches)}",
+                foreground=MUTED,
+            )
 
-    textbox = tk.Text(lf, width=72, height=26, relief="flat",
+
+def _update_result_search(*, jump_first: bool = True) -> None:
+    """Recompute all keyword matches in the Result textbox and highlight them."""
+    global result_search_matches, result_search_index
+    if not hasattr(textbox, "tag_remove"):
+        return
+    textbox.tag_remove("search_match", "1.0", "end")
+    textbox.tag_remove("search_current", "1.0", "end")
+    result_search_matches = []
+    result_search_index = -1
+
+    query = result_search_var.get().strip() if result_search_var is not None else ""
+    if not query:
+        if result_search_status is not None:
+            result_search_status.configure(text="", foreground=MUTED)
+        return
+
+    start = "1.0"
+    qlen = len(query)
+    while True:
+        pos = textbox.search(query, start, stopindex="end", nocase=True)
+        if not pos:
+            break
+        end = f"{pos}+{qlen}c"
+        textbox.tag_add("search_match", pos, end)
+        result_search_matches.append((pos, end))
+        start = end
+
+    if result_search_matches:
+        result_search_index = 0 if jump_first else min(
+            max(0, result_search_index), len(result_search_matches) - 1
+        )
+        _apply_current_search_highlight()
+    elif result_search_status is not None:
+        result_search_status.configure(text="0/0", foreground=DANGER)
+
+
+def _step_result_search(delta: int) -> str:
+    """Move to the next (+1) or previous (-1) keyword match in Result."""
+    global result_search_index
+    if not result_search_matches:
+        _update_result_search(jump_first=True)
+        return "break"
+    result_search_index = (result_search_index + delta) % len(result_search_matches)
+    _apply_current_search_highlight()
+    return "break"
+
+
+def _clear_result_search(_event=None) -> str:
+    """Clear the Result keyword search box and remove highlights."""
+    if result_search_var is not None:
+        result_search_var.set("")
+    return "break"
+
+
+def _focus_result_search(_event=None) -> str:
+    """Focus the Result keyword search entry and select its text (Ctrl+F)."""
+    if result_search_entry is not None:
+        result_search_entry.focus_set()
+        result_search_entry.selection_range(0, "end")
+    return "break"
+
+
+def _build_result_panel(parent) -> None:
+    """Build the flat report text widget with a header search bar and scrollbar."""
+    global textbox, result_search_var, result_search_entry, result_search_status
+    panel = tk.Frame(
+        parent,
+        background=BG,
+        highlightthickness=1,
+        highlightbackground=BORDER,
+        highlightcolor=BORDER,
+        padx=PAD,
+        pady=PAD,
+    )
+    panel.grid(sticky="nsew")
+    panel.rowconfigure(1, weight=1)
+    panel.columnconfigure(0, weight=1)
+
+    # Header row: "Result" title on the left, keyword search bar on the far right
+    header = ttk.Frame(panel, style="App.TFrame")
+    header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, PAD))
+    ttk.Label(header, text="Result", style="Section.TLabel").pack(side="left")
+
+    search_bar = ttk.Frame(header, style="App.TFrame")
+    search_bar.pack(side="right")
+    ttk.Label(search_bar, text="Search:", style="CardMuted.TLabel").pack(
+        side="left", padx=(0, 4)
+    )
+    result_search_var = tk.StringVar(value="")
+    result_search_entry = ttk.Entry(
+        search_bar, textvariable=result_search_var, width=20
+    )
+    result_search_entry.pack(side="left", padx=(0, 4))
+    result_search_status = ttk.Label(
+        search_bar, text="", style="CardMuted.TLabel", width=6, anchor="e"
+    )
+    result_search_status.pack(side="left", padx=(0, 4))
+    ttk.Button(
+        search_bar,
+        text="▲",
+        style="Small.TButton",
+        width=2,
+        command=lambda: _step_result_search(-1),
+    ).pack(side="left", padx=(0, 2))
+    ttk.Button(
+        search_bar,
+        text="▼",
+        style="Small.TButton",
+        width=2,
+        command=lambda: _step_result_search(1),
+    ).pack(side="left", padx=(0, 2))
+    ttk.Button(
+        search_bar,
+        text="×",
+        style="Small.TButton",
+        width=2,
+        command=_clear_result_search,
+    ).pack(side="left")
+
+    result_search_var.trace_add(
+        "write", lambda *_args: _update_result_search(jump_first=True)
+    )
+    result_search_entry.bind("<Return>", lambda _e: _step_result_search(1))
+    result_search_entry.bind("<Shift-Return>", lambda _e: _step_result_search(-1))
+    result_search_entry.bind("<Escape>", _clear_result_search)
+
+    textbox = tk.Text(panel, width=72, height=18, relief="flat",
                       background=CARD, foreground=FG, insertbackground=ACCENT,
                       borderwidth=0, highlightthickness=1,
                       highlightbackground=BORDER, highlightcolor=ACCENT,
                       padx=6, pady=4, wrap="none",
                       font=("Consolas", 10))
-    textbox.grid(row=0, column=0, sticky="nsew")
-    sb = ttk.Scrollbar(lf, orient="vertical", command=textbox.yview)
-    sb.grid(row=0, column=1, sticky="ns")
+    textbox.grid(row=1, column=0, sticky="nsew")
+    textbox.tag_configure("search_match", background="#fef08a", foreground=FG)
+    textbox.tag_configure("search_current", background="#f97316", foreground="#ffffff")
+    textbox.tag_raise("search_current", "search_match")
+
+    sb = ttk.Scrollbar(panel, orient="vertical", command=textbox.yview)
+    sb.grid(row=1, column=1, sticky="ns")
     textbox.configure(yscrollcommand=sb.set)
 
     textbox.delete("0.0", "end")
@@ -1362,7 +1574,7 @@ def build_gui() -> None:
     app.title("PGS — Planetary Gear Sizing")
     app.configure(background=BG)
     app.resizable(True, True)
-    app.minsize(880, 480)
+    app.minsize(880, 420)
     if sys.platform.startswith("win"):
         app.iconbitmap("PGS.ico")
 
@@ -1484,20 +1696,28 @@ def build_gui() -> None:
     ttk.Button(bar, text="Load", style="Accent.TButton",
                command=button_load_callback).pack(side="right", padx=(0, PAD))
 
-    # Size the window cleanly inside the display so the bottom action bar is
-    # never clipped; when all input cards exceed the window height, the left
-    # scrollbar makes every parameter reachable.
+    # Size the window to ~70% of the full stacked height so it fits comfortably
+    # on screen while the left scrollbar keeps every input reachable.
     app.update_idletasks()
     _sync_input_scrollregion()
     app.update_idletasks()
     screen_w = app.winfo_screenwidth()
     screen_h = app.winfo_screenheight()
     init_w = min(max(980, app.winfo_reqwidth() + 16), max(880, screen_w - 40))
-    init_h = min(
+    full_h = min(
         container.winfo_reqheight() + bar.winfo_reqheight() + PAD * 4 + 8,
         max(520, screen_h - 100),
     )
+    init_h = max(
+        420,
+        min(
+            int(round(full_h * DEFAULT_WINDOW_HEIGHT_RATIO)),
+            int(round(screen_h * 0.57)),
+        ),
+    )
     app.geometry(f"{init_w}x{init_h}")
+    app.bind("<Control-f>", _focus_result_search)
+    app.bind("<Control-F>", _focus_result_search)
 
 
 def main(argv: list[str] | None = None) -> None:
